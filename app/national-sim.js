@@ -1,0 +1,152 @@
+// Demo trains for the whole country: invented services running between
+// neighbouring stations, plus invented departure boards and a movement log.
+// It answers the same three questions the live data service does:
+//   trains(box)        trains on the map inside a box
+//   board(crs, type)   departures or arrivals at a station
+//   moves(lat, lon, r) recent movements within r km
+
+import { STATIONS } from './stations.js';
+import { BY_CRS, km, inBox } from './geo.js';
+import { band } from './model.js';
+
+const TOCS = ['East Midlands Railway', 'CrossCountry', 'Northern', 'Avanti West Coast', 'LNER', 'GWR', 'Southern', 'Thameslink', 'ScotRail', 'Transport for Wales', 'TransPennine Express', 'West Midlands Trains', 'Greater Anglia', 'Southeastern', 'South Western Railway', 'c2c', 'Chiltern Railways'];
+const pick = (a) => a[Math.floor(Math.random() * a.length)];
+
+function randomDelay() {
+  const r = Math.random();
+  if (r < 0.62) return Math.random() < 0.5 ? 0 : 1;
+  if (r < 0.9) return 2 + Math.floor(Math.random() * 8);
+  return 10 + Math.floor(Math.random() * 25);
+}
+
+export function createNationalSim(count = 900) {
+  // Each station's nearest neighbours within 30 km form a rough network
+  const pts = STATIONS.map(([crs, name, lat, lon]) => ({ crs, name, lat, lon }));
+  const grid = new Map();
+  const cell = (lat, lon) => Math.floor(lat * 4) + ':' + Math.floor(lon * 3);
+  for (const p of pts) { const k = cell(p.lat, p.lon); if (!grid.has(k)) grid.set(k, []); grid.get(k).push(p); }
+  const near = new Map();
+  for (const p of pts) {
+    const cand = [];
+    const a = Math.floor(p.lat * 4), b = Math.floor(p.lon * 3);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const q of grid.get((a + i) + ':' + (b + j)) || []) {
+      if (q !== p) cand.push({ q, d: km(p.lat, p.lon, q.lat, q.lon) });
+    }
+    near.set(p.crs, cand.filter((c) => c.d > 1 && c.d < 30).sort((x, y) => x.d - y.d).slice(0, 4).map((c) => c.q));
+  }
+
+  const used = new Set();
+  const code = () => { let c; do { c = pick('12459') + pick('ABCDEFGHJKLMNOPRSTUVWXZ') + String(Math.floor(Math.random() * 100)).padStart(2, '0'); } while (used.has(c)); used.add(c); return c; };
+  const trains = [];
+  const log = [];
+
+  function route() {
+    let p = pick(pts);
+    const path = [p];
+    for (let i = 0; i < 7; i++) {
+      const opts = (near.get(p.crs) || []).filter((q) => !path.includes(q));
+      if (!opts.length) break;
+      p = pick(opts);
+      path.push(p);
+    }
+    return path.length >= 3 ? path : null;
+  }
+
+  function spawn(now, warm) {
+    const path = route();
+    if (!path) return;
+    const t = { code: code(), toc: pick(TOCS), delay: randomDelay(), path, leg: 0, legStart: now, dwell: false, cancelled: false };
+    t.legMins = legMins(t);
+    if (warm) {
+      t.leg = Math.floor(Math.random() * (path.length - 1));
+      t.legStart = now - Math.random() * t.legMins * 60000;
+    }
+    trains.push(t);
+  }
+  function legMins(t) {
+    const a = t.path[t.leg], b = t.path[t.leg + 1];
+    return Math.max(2, km(a.lat, a.lon, b.lat, b.lon) / 1.3);
+  }
+  function note(t, stn, event, now) {
+    log.push({ at: now, crs: stn.crs, name: stn.name, lat: stn.lat, lon: stn.lon, code: t.code, toc: t.toc, event, delay: t.delay, dest: t.path[t.path.length - 1].name });
+    if (log.length > 4000) log.splice(0, log.length - 4000);
+  }
+
+  function tick(now = Date.now()) {
+    for (const t of [...trains]) {
+      const elapsed = (now - t.legStart) / 60000;
+      if (elapsed >= t.legMins) {
+        const arrived = t.path[t.leg + 1];
+        note(t, arrived, t.leg + 1 === t.path.length - 1 ? 'Arrived (terminates)' : 'Arrived', now);
+        if (Math.random() < 0.1) t.delay += 1 + Math.floor(Math.random() * 3);
+        t.leg++;
+        if (t.leg >= t.path.length - 1) { trains.splice(trains.indexOf(t), 1); used.delete(t.code); continue; }
+        note(t, arrived, 'Departed', now);
+        t.legStart = now;
+        t.legMins = legMins(t);
+      }
+    }
+    while (trains.length < count) spawn(now, false);
+  }
+
+  function position(t, now) {
+    const a = t.path[t.leg], b = t.path[t.leg + 1];
+    const f = Math.min(1, (now - t.legStart) / (t.legMins * 60000));
+    return { lat: a.lat + (b.lat - a.lat) * f, lon: a.lon + (b.lon - a.lon) * f, from: a, to: b };
+  }
+
+  function view(t, now) {
+    const p = position(t, now);
+    return {
+      id: t.code, code: t.code, toc: t.toc, delay: t.delay, cancelled: t.cancelled, band: band(t),
+      lat: p.lat, lon: p.lon, last: p.from.name, next: p.to.name,
+      origin: t.path[0].name, dest: t.path[t.path.length - 1].name
+    };
+  }
+
+  function trainsIn(box, now = Date.now()) {
+    const out = [];
+    for (const t of trains) { const v = view(t, now); if (inBox(v.lat, v.lon, box)) out.push(v); }
+    return { mode: 'demo', total: out.length, trains: out.slice(0, 600) };
+  }
+
+  function board(crs, type = 'dep', now = Date.now()) {
+    const st = BY_CRS.get(crs);
+    if (!st) return { error: 'Unknown station' };
+    const nb = near.get(crs) || [];
+    const services = [];
+    let t0 = now - 2 * 60000;
+    for (let i = 0; i < 12; i++) {
+      t0 += (3 + Math.random() * 9) * 60000;
+      const delay = randomDelay();
+      const far = (nb.length ? (near.get(pick(nb).crs) || []).concat(nb) : []).filter((q) => q.crs !== crs);
+      const other = far.length ? pick(far) : st;
+      const cancelled = Math.random() < 0.03;
+      const time = new Date(t0);
+      const hhmm = time.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' });
+      const exp = new Date(t0 + delay * 60000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' });
+      services.push({
+        id: crs + i, booked: hhmm, expected: cancelled ? 'Cancelled' : delay >= 1 ? exp : 'On time', delay: cancelled ? null : delay, cancelled,
+        place: other.name, platform: String(1 + Math.floor(Math.random() * 6)), toc: pick(TOCS),
+        reason: cancelled ? 'This train has been cancelled because of a shortage of train crew' : delay >= 10 ? 'This train has been delayed by a fault with the signalling system' : null
+      });
+    }
+    return { mode: 'demo', crs, name: st.name, type, services };
+  }
+
+  function moves(lat, lon, radius = 15, now = Date.now()) {
+    const out = [];
+    for (let i = log.length - 1; i >= 0 && out.length < 80; i--) {
+      const m = log[i];
+      if (now - m.at > 60 * 60000) break;
+      if (km(lat, lon, m.lat, m.lon) <= radius) out.push(m);
+    }
+    return { mode: 'demo', moves: out };
+  }
+
+  // Start 20 minutes ago and run forward, so the movement log has some history
+  const start = Date.now() - 20 * 60000;
+  for (let i = 0; i < count; i++) spawn(start, true);
+  for (let s = 0; s <= 20; s++) tick(start + s * 60000);
+  return { tick, trains: trainsIn, board, moves };
+}

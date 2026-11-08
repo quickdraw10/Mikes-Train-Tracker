@@ -31,6 +31,23 @@ export function applyStanox(log = console.log) {
   return n;
 }
 
+export const ALL_FILE = path.join(here, 'data', 'stanox-crs.json');
+
+export function stanoxToCrs(corpus) {
+  const out = {};
+  for (const row of corpus.TIPLOCDATA || []) {
+    const crs = (row['3ALPHA'] || '').trim();
+    const stanox = String(row.STANOX || '').trim();
+    if (crs && stanox && !out[stanox]) out[stanox] = crs;
+  }
+  return out;
+}
+
+export function loadStanoxCrs(log = console.log) {
+  if (!fs.existsSync(ALL_FILE)) { log('[corpus] no data/stanox-crs.json yet — the map will stay empty in live mode. Run: npm run corpus'); return {}; }
+  return JSON.parse(fs.readFileSync(ALL_FILE, 'utf8'));
+}
+
 export function extract(corpus, crsList) {
   const want = new Set(crsList);
   const out = {};
@@ -57,7 +74,11 @@ async function main() {
   const map = extract(corpus, crs);
   fs.mkdirSync(path.dirname(FILE), { recursive: true });
   fs.writeFileSync(FILE, JSON.stringify(map, null, 2));
-  console.log('Saved', Object.keys(map).length, 'of', crs.length, 'stations to', FILE);
+  console.log('Saved', Object.keys(map).length, 'of', crs.length, 'route stations to', FILE);
+  // Every STANOX that is a passenger station, for placing trains on the map
+  const all = stanoxToCrs(corpus);
+  fs.writeFileSync(ALL_FILE, JSON.stringify(all));
+  console.log('Saved', Object.keys(all).length, 'station STANOX codes to', ALL_FILE);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) main();

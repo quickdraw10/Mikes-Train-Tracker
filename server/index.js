@@ -19,7 +19,10 @@ import { createSim } from '../app/sim.js';
 import { handleTd } from './td.js';
 import { handleSClass } from './sclass.js';
 import { handleTrust, buildStanoxIndex, prune } from './trust.js';
-import { applyStanox } from './corpus.js';
+import { applyStanox, loadStanoxCrs } from './corpus.js';
+import { createNational, handleNational, trainsIn, movesNear, pruneNational } from './national.js';
+import { getBoard } from './ldb.js';
+import { createNationalSim } from '../app/national-sim.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const APP_DIR = path.resolve(here, '..', 'app');
@@ -28,6 +31,7 @@ const { NR_USER: user, NR_PASS: pass } = process.env;
 const live = Boolean(user && pass);
 
 let raw;
+let national; // the map, station boards and area movements
 let stats = { td: 0, trust: 0, lastTd: null, lastTrust: null, started: Date.now() };
 
 if (live) {
@@ -57,15 +61,29 @@ if (live) {
         handleSClass(batch, raw, areas);
         if (JSON.stringify(raw.sbits) !== sBefore) changed = true;
       }
-      else { stats.trust += batch.length; stats.lastTrust = now; changed = handleTrust(batch, raw, stanoxIndex, now); }
+      else {
+        stats.trust += batch.length; stats.lastTrust = now;
+        changed = handleTrust(batch, raw, stanoxIndex, now);
+        handleNational(batch, nat, stanoxCrs, now);
+      }
       if (changed) { raw.updated = now; schedulePush(); }
     }
   });
-  setInterval(() => prune(raw), 10 * 60 * 1000);
+  const nat = createNational();
+  const stanoxCrs = loadStanoxCrs();
+  setInterval(() => { prune(raw); pruneNational(nat); }, 10 * 60 * 1000);
+  national = {
+    trains: (box) => trainsIn(nat, box),
+    moves: (lat, lon, r) => movesNear(nat, lat, lon, r),
+    board: (crs, type) => getBoard(crs, type)
+  };
 } else {
   const sim = createSim();
   raw = sim.raw;
   setInterval(() => { sim.tick(); schedulePush(); }, 4000);
+  const nsim = createNationalSim();
+  setInterval(() => nsim.tick(), 10000);
+  national = { trains: nsim.trains, moves: nsim.moves, board: nsim.board };
   console.log('No NR_USER / NR_PASS set — running on demo trains.');
 }
 
@@ -101,6 +119,26 @@ const server = http.createServer((req, res) => {
     res.write('retry: 5000\n\ndata: ' + JSON.stringify(buildView(raw)) + '\n\n');
     clients.add(res);
     req.on('close', () => clients.delete(res));
+    return;
+  }
+  const json = (code, body) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)); };
+  const num = (k) => Number(url.searchParams.get(k));
+  if (url.pathname === '/api/trains') {
+    const box = { w: num('w'), s: num('s'), e: num('e'), n: num('n') };
+    if (![box.w, box.s, box.e, box.n].every(Number.isFinite)) return json(400, { error: 'Need w, s, e, n' });
+    return json(200, national.trains(box));
+  }
+  if (url.pathname === '/api/moves') {
+    const lat = num('lat'), lon = num('lon'), r = Math.min(50, num('km') || 15);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return json(400, { error: 'Need lat and lon' });
+    return json(200, national.moves(lat, lon, r));
+  }
+  const bm = /^\/api\/board\/([A-Za-z]{3})$/.exec(url.pathname);
+  if (bm) {
+    const type = url.searchParams.get('type') === 'arr' ? 'arr' : 'dep';
+    Promise.resolve(national.board(bm[1].toUpperCase(), type))
+      .then((b) => json(b.error ? (b.needsKey ? 503 : 502) : 200, b))
+      .catch((e) => json(502, { error: 'Could not reach National Rail: ' + e.message }));
     return;
   }
   if (url.pathname === '/api/health') {

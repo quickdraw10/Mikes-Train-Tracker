@@ -5,6 +5,10 @@
 import { API_BASE } from './config.js';
 import { buildView, band } from './model.js';
 import { createSim } from './sim.js';
+import * as api from './api.js';
+import { closeCustomSheet } from './ui.js';
+import { showMap } from './mapview.js';
+import { showBoards } from './boards.js';
 
 const $view = document.getElementById('view');
 const $sheet = document.getElementById('sheet');
@@ -22,6 +26,7 @@ const shortLate = (d, cancelled) => cancelled ? 'Canc' : d == null ? '–' : d >
 function startDemo() {
   if (ui.source === 'demo') return;
   ui.source = 'demo';
+  api.useDemo();
   const sim = createSim();
   const update = () => { ui.view = buildView(sim.raw); render(); };
   update();
@@ -36,6 +41,7 @@ function connect() {
   es.onmessage = (e) => {
     got = true;
     clearTimeout(giveUp);
+    if (ui.source !== 'server') api.useServer(API_BASE);
     ui.source = 'server';
     ui.view = JSON.parse(e.data);
     render();
@@ -167,6 +173,7 @@ function renderRoute() {
 // ---------- train sheet ----------
 function openSheet(code) {
   ui.selected = code;
+  $sheet.dataset.kind = '';
   renderSheet();
   $sheet.hidden = false;
   $sheetCard.querySelector('.close')?.focus();
@@ -189,28 +196,38 @@ function renderSheet() {
 
 // ---------- render & events ----------
 function render() {
+  const light = ui.tab === 'route';
+  document.body.dataset.theme = light ? 'light' : 'dark';
+  document.body.dataset.tab = ui.tab;
+  document.querySelector('meta[name="theme-color"]').content = light ? '#FFFFFF' : '#0B0D12';
+  document.getElementById('mapview').hidden = ui.tab !== 'map';
+  document.getElementById('boardsview').hidden = ui.tab !== 'boards';
+  $view.hidden = ui.tab !== 'panel' && ui.tab !== 'route';
+  if ($view.hidden) return;
   if (!ui.view) { $view.innerHTML = `<header class="head"><h1>Train Tracker</h1><div class="sub"><span class="pill wait">Connecting…</span></div></header>`; return; }
-  document.body.dataset.theme = ui.tab === 'panel' ? 'dark' : 'light';
-  document.querySelector('meta[name="theme-color"]').content = ui.tab === 'panel' ? '#0B0D12' : '#FFFFFF';
   $view.innerHTML = ui.tab === 'panel' ? renderPanel() : renderRoute();
   if (ui.selected) renderSheet();
 }
 
-document.querySelector('.tabs').addEventListener('click', (e) => {
-  const btn = e.target.closest('.tab');
-  if (!btn) return;
-  ui.tab = btn.dataset.tab;
-  document.querySelectorAll('.tab').forEach((t) => t.toggleAttribute('aria-current', t === btn));
-  btn.setAttribute('aria-current', 'page');
+function switchTab(tab) {
+  ui.tab = tab;
+  document.querySelectorAll('.tab').forEach((t) => { if (t.dataset.tab === tab) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current'); });
   window.scrollTo(0, 0);
   render();
+  if (tab === 'map') showMap();
+  if (tab === 'boards') showBoards();
+}
+
+document.querySelector('.tabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('.tab');
+  if (btn) switchTab(btn.dataset.tab);
 });
 $view.addEventListener('click', (e) => {
   const el = e.target.closest('[data-train]');
   if (el) openSheet(el.dataset.train);
 });
 $sheet.addEventListener('click', (e) => { if (e.target === $sheet || e.target.closest('.close')) closeSheet(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$sheet.hidden) closeSheet(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$sheet.hidden) { closeCustomSheet(); closeSheet(); } });
 
-render();
+switchTab('map');
 connect();

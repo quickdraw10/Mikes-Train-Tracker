@@ -1,8 +1,13 @@
-# Train Tracker
+# Mike's Train Tracker
 
-Live UK train positions and delays, drawn from Network Rail's signalling data.
-Two views so far, in the Vouch colours:
+Live UK train positions and delays, drawn from Network Rail's signalling data, in the Vouch colours.
 
+- **Map (design D)** – every train in the country on a real map. Zoomed out, each train is a dot
+  coloured by delay; zoom in and they become headcode chips and stations appear. Search any station,
+  tap the gold arrow to jump to where you are, tap a station for its departures and arrivals, and
+  "Watch this area" to keep a chip for it (e.g. Nottingham) that opens a live log of every train
+  movement within 15 km.
+- **Boards** – departures and arrivals for any station: search, "Find stations near me", or saved stations.
 - **Panel (design A)** – an old-school signal box panel. Each train's headcode sits in the
   signalling berth it is in, and the track it occupies lights up in its delay colour.
 - **Route (design C)** – a line of stations with Down and Up tracks. Each section is coloured
@@ -58,7 +63,11 @@ npm test           # checks the feed parsing with sample messages
    watching which bit drops to red as each train passes, and saves `server/data/signals-VC.json`.
    Busy signals decode within an hour; rarely used ones can take days, and running it again adds to
    what it found. If an area sends no signalling data the tool says so, and its signals stay hollow.
-6. `npm start` – it now says "live mode".
+6. **Station boards:** register at https://raildata.org.uk (free, "Individual not affiliated with a
+   company"), subscribe to **Live Departure Board** and, for arrivals, **Live Arrival and Departure
+   Boards**, and copy each product's Consumer key into `LDB_KEY` and `LDB_ARR_KEY`.
+7. `npm start` – it now says "live mode". The map needs `npm run corpus` (step 3) to know which
+   station each movement report is at.
 
 ## Hosting
 
@@ -80,6 +89,18 @@ on its own, but not the service. When the app is hosted somewhere other than the
   restrictive aspect, not whether it shows green, single or double yellow. Not every signalling
   area sends this data, and some send only part of it.
 - TRUST has a short planned outage most Sundays around 02:00–02:15; missed messages arrive after.
+
+- On the map, trains are placed at the last station that reported them and then moved towards
+  the next reporting point using the feed's own running-time estimate. Junctions and other
+  non-station timing points have no map position, so a train can sit at its last station until the
+  next station report.
+- The map shows up to 600 trains at once (the most delayed first); zoom in to see every train in an area.
+
+## Credits
+
+- Station list: [uk-railway-stations](https://github.com/davwheat/uk-railway-stations), Open Database License (ODbL).
+- Map: © OpenStreetMap contributors, © CARTO (free basemap for non-commercial use).
+- Train data: Network Rail open data feeds; station boards from National Rail via the Rail Data Marketplace.
 
 ## Still to build
 
