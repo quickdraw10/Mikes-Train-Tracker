@@ -99,7 +99,7 @@ on its own, but not the service. When the app is hosted somewhere other than the
 ## Credits
 
 - Station list: [uk-railway-stations](https://github.com/davwheat/uk-railway-stations), Open Database License (ODbL).
-- Map: © OpenStreetMap contributors, © CARTO (free basemap for non-commercial use).
+- Map: © OpenStreetMap contributors (tile.openstreetmap.org, fine for personal use; a commercial version would need its own tile provider).
 - Train data: Network Rail open data feeds; station boards from National Rail via the Rail Data Marketplace.
 
 ## Still to build
