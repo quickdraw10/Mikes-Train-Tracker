@@ -1,0 +1,20 @@
+{
+  "name": "train-tracker-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Listens to Network Rail signalling (TD) and movement (TRUST) feeds and streams train positions and delays to the app.",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node index.js",
+    "demo": "node index.js",
+    "test": "node test.js",
+    "corpus": "node corpus.js",
+    "sniff": "node sniff.js",
+    "smart": "node smart.js",
+    "signals": "node signals.js"
+  },
+  "dependencies": {
+    "stompit": "^1.0.0"
+  }
+}
