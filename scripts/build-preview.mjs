@@ -19,9 +19,10 @@ const js = [
 ].join('\n');
 
 const html = app('index.html');
-const body = html.slice(html.indexOf('<main'), html.indexOf('<script type="module"'));
+const iconUri = 'data:image/svg+xml;base64,' + Buffer.from(app('icon.svg')).toString('base64');
+const body = html.slice(html.indexOf('<header class="brand"'), html.indexOf('<script type="module"')).replaceAll('src="icon.svg"', `src="${iconUri}"`);
 
-const out = `<title>Train Tracker</title>
+const out = `<title>Mike's Train Tracker</title>
 <meta name="theme-color" content="#0B0D12">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@600;700&family=JetBrains+Mono:wght@600;700&display=swap">
 <style>

@@ -27,7 +27,13 @@ body { background: var(--bg); color: var(--text); font-family: var(--body); font
 button { font: inherit; color: inherit; }
 h1 { font-family: var(--display); font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
 
-main { max-width: 560px; margin: 0 auto; padding: calc(env(safe-area-inset-top, 0px) + 20px) 0 calc(var(--tabs-h) + 16px); }
+.brand { max-width: 560px; margin: 0 auto; display: flex; align-items: center; gap: 10px; padding: calc(env(safe-area-inset-top, 0px) + 14px) 20px 6px; }
+.brand img { border-radius: 8px; display: block; }
+.wordmark { display: flex; flex-direction: column; line-height: 1.05; }
+.wordmark .mikes { font: 700 11px var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--trim); }
+body[data-theme="light"] .wordmark .mikes { color: #9A7300; }
+.wordmark .tt { font: 700 17px var(--display); letter-spacing: -0.01em; color: var(--text); }
+main { max-width: 560px; margin: 0 auto; padding: 10px 0 calc(var(--tabs-h) + 16px); }
 .head { padding: 0 20px 14px; display: flex; flex-direction: column; gap: 4px; }
 .sub { font-size: 13px; color: var(--text2); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pill { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; padding: 3px 8px; border-radius: 6px; }
