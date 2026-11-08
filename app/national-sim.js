@@ -40,8 +40,8 @@ export function createNationalSim(count = 900) {
   const trains = [];
   const log = [];
 
-  function route() {
-    let p = pick(pts);
+  function route(start) {
+    let p = start || pick(pts);
     const path = [p];
     for (let i = 0; i < 7; i++) {
       const opts = (near.get(p.crs) || []).filter((q) => !path.includes(q));
@@ -52,12 +52,14 @@ export function createNationalSim(count = 900) {
     return path.length >= 3 ? path : null;
   }
 
-  function spawn(now, warm) {
-    const path = route();
+  function spawn(now, warm, start) {
+    const path = route(start);
     if (!path) return;
     const t = { code: code(), toc: pick(TOCS), delay: randomDelay(), path, leg: 0, legStart: now, dwell: false, cancelled: false };
     t.legMins = legMins(t);
-    if (warm) {
+    if (warm === 'near') {
+      t.legStart = now - Math.random() * 0.6 * t.legMins * 60000; // just leaving its first station
+    } else if (warm) {
       t.leg = Math.floor(Math.random() * (path.length - 1));
       t.legStart = now - Math.random() * t.legMins * 60000;
     }
@@ -104,7 +106,19 @@ export function createNationalSim(count = 900) {
     };
   }
 
+  // A few hundred demo trains spread over 2,600 stations leaves most towns empty,
+  // so when you look at (or watch) a quiet area, start some extra trains there.
+  function liven(box, now, want = 12) {
+    let have = 0;
+    for (const t of trains) { const v = position(t, now); if (inBox(v.lat, v.lon, box)) have++; }
+    if (have >= want || trains.length > count * 3) return;
+    const local = pts.filter((p) => inBox(p.lat, p.lon, box));
+    if (!local.length) return;
+    for (let i = have; i < want; i++) spawn(now, 'near', pick(local));
+  }
+
   function trainsIn(box, now = Date.now()) {
+    if ((box.e - box.w) < 1.5) liven(box, now);
     const out = [];
     for (const t of trains) { const v = view(t, now); if (inBox(v.lat, v.lon, box)) out.push(v); }
     return { mode: 'demo', total: out.length, trains: out.slice(0, 600) };
@@ -135,6 +149,8 @@ export function createNationalSim(count = 900) {
   }
 
   function moves(lat, lon, radius = 15, now = Date.now()) {
+    const dLat = radius / 111, dLon = radius / (111 * Math.cos(lat * Math.PI / 180));
+    liven({ w: lon - dLon, e: lon + dLon, s: lat - dLat, n: lat + dLat }, now);
     const out = [];
     for (let i = log.length - 1; i >= 0 && out.length < 80; i--) {
       const m = log[i];

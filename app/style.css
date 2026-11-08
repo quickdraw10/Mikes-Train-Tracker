@@ -195,3 +195,6 @@ body[data-tab="map"] { overflow: hidden; }
 .leaflet-container { font-family: var(--body); background: #0C1B38; }
 .leaflet-control-attribution { background: rgba(11,13,18,0.7) !important; color: #A3A8B1 !important; font-size: 10px; }
 .leaflet-control-attribution a { color: #C9D3E8 !important; }
+
+/* OpenStreetMap tiles turned into a dark map, then let the navy show through */
+.leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.92) saturate(0.55); opacity: 0.78; }

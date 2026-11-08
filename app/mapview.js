@@ -32,9 +32,10 @@ function start() {
   }
   map = L.map('map', { zoomControl: false, attributionControl: true, minZoom: 5, maxZoom: 17, worldCopyJump: false })
     .setView([53.0, -1.6], 6);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    subdomains: 'abcd', maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+  // OpenStreetMap's free map, darkened to navy in style.css (.leaflet-tile-pane)
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   }).addTo(map);
   stationLayer = L.layerGroup().addTo(map);
   trainLayer = L.layerGroup().addTo(map);
