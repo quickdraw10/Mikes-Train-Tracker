@@ -19,7 +19,7 @@ import { createSim } from '../app/sim.js';
 import { handleTd } from './td.js';
 import { handleSClass } from './sclass.js';
 import { handleTrust, buildStanoxIndex, prune } from './trust.js';
-import { applyStanox, loadStanoxCrs } from './corpus.js';
+import { applyStanox, loadStanoxCrs, downloadCorpus, haveCorpus } from './corpus.js';
 import { createNational, handleNational, trainsIn, movesNear, pruneNational } from './national.js';
 import { getBoard } from './ldb.js';
 import { createNationalSim } from '../app/national-sim.js';
@@ -37,6 +37,10 @@ let stats = { td: 0, trust: 0, lastTd: null, lastTrust: null, started: Date.now(
 if (live) {
   raw = emptyState();
   raw.mode = 'live';
+  // Hosts like Railway start each deploy with a fresh disk, so fetch station codes when missing
+  if (!haveCorpus()) {
+    try { await downloadCorpus(user, pass); } catch (e) { console.log('[corpus] could not download:', e.message); }
+  }
   applyStanox();
   const stanoxIndex = buildStanoxIndex();
   const areas = new Set(PANELS.map((p) => p.area));

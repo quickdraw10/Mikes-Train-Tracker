@@ -69,7 +69,19 @@ npm test           # checks the feed parsing with sample messages
 7. `npm start` – it now says "live mode". The map needs `npm run corpus` (step 3) to know which
    station each movement report is at.
 
-## Hosting
+## Hosting on Railway
+
+1. Sign in at https://railway.com with GitHub, then **New Project → Deploy from GitHub repo →
+   Mikes-Train-Tracker**. Railway reads `railway.json` and `package.json` and starts the service.
+2. In the service's **Variables** tab add `NR_USER` and `NR_PASS` (your Network Rail open data
+   login), and later `LDB_KEY` / `LDB_ARR_KEY` (Rail Data Marketplace). Never put these in GitHub.
+3. In **Settings → Networking**, press **Generate Domain** to get the service's web address.
+4. Put that address in `app/config.js` as `API_BASE` so the GitHub Pages app uses it.
+
+On each start the service downloads the station codes (CORPUS) itself and connects to the feeds.
+Feed status: https://nrodcaci.grafana.net/public-dashboards/960fa54d94884dc7abd1f5ab9c70df7e
+
+## Hosting elsewhere
 
 The data service has to stay connected to the feeds all the time, so it needs an always-on
 Node.js host (a small cloud server or a Raspberry Pi at home). GitHub Pages can host the app

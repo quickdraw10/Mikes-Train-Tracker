@@ -1,9 +1,13 @@
 {
-  "name": "train-tracker",
+  "name": "mikes-train-tracker",
   "private": true,
   "type": "module",
+  "engines": { "node": ">=20" },
   "scripts": {
-    "start": "npm --prefix server start",
+    "start": "node server/index.js",
     "test": "npm --prefix server test"
+  },
+  "dependencies": {
+    "stompit": "^1.0.0"
   }
 }

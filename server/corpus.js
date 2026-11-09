@@ -61,12 +61,11 @@ export function extract(corpus, crsList) {
   return out;
 }
 
-async function main() {
-  const { NR_USER: user, NR_PASS: pass } = process.env;
-  if (!user || !pass) { console.error('Set NR_USER and NR_PASS (your Network Rail data feeds login) first.'); process.exit(1); }
-  console.log('Downloading CORPUS…');
+// Downloads CORPUS and saves both lookups. Returns false if it could not.
+export async function downloadCorpus(user, pass, log = console.log) {
+  log('[corpus] downloading station codes (CORPUS)…');
   const res = await fetch(URL_CORPUS, { headers: { Authorization: 'Basic ' + Buffer.from(user + ':' + pass).toString('base64') }, redirect: 'follow' });
-  if (!res.ok) { console.error('Download failed:', res.status, res.statusText); process.exit(1); }
+  if (!res.ok) { log('[corpus] download failed:', res.status, res.statusText, '— check NR_USER / NR_PASS'); return false; }
   let buf = Buffer.from(await res.arrayBuffer());
   if (buf[0] === 0x1f && buf[1] === 0x8b) buf = zlib.gunzipSync(buf);
   const corpus = JSON.parse(buf.toString('utf8'));
@@ -74,11 +73,20 @@ async function main() {
   const map = extract(corpus, crs);
   fs.mkdirSync(path.dirname(FILE), { recursive: true });
   fs.writeFileSync(FILE, JSON.stringify(map, null, 2));
-  console.log('Saved', Object.keys(map).length, 'of', crs.length, 'route stations to', FILE);
+  log('[corpus] saved', Object.keys(map).length, 'of', crs.length, 'route stations');
   // Every STANOX that is a passenger station, for placing trains on the map
   const all = stanoxToCrs(corpus);
   fs.writeFileSync(ALL_FILE, JSON.stringify(all));
-  console.log('Saved', Object.keys(all).length, 'station STANOX codes to', ALL_FILE);
+  log('[corpus] saved', Object.keys(all).length, 'station STANOX codes');
+  return true;
+}
+
+export const haveCorpus = () => fs.existsSync(ALL_FILE) && fs.existsSync(FILE);
+
+async function main() {
+  const { NR_USER: user, NR_PASS: pass } = process.env;
+  if (!user || !pass) { console.error('Set NR_USER and NR_PASS (your Network Rail data feeds login) first.'); process.exit(1); }
+  if (!(await downloadCorpus(user, pass))) process.exit(1);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) main();
