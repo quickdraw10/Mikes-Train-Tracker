@@ -105,7 +105,7 @@ body[data-theme="light"] .pill.demo { color: #7A5A00; }
 .sheet { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: flex-end; justify-content: center; z-index: 10; }
 .sheet[hidden] { display: none; }
 .sheet-card { width: 100%; max-width: 560px; padding: 10px 20px calc(24px + env(safe-area-inset-bottom, 0px)); border-radius: 22px 22px 0 0; background: var(--bg); box-shadow: 0 -6px 20px rgba(0,0,0,0.25); display: flex; flex-direction: column; gap: 12px; }
-.grab { align-self: center; width: 40px; height: 5px; border-radius: 3px; background: var(--line); }
+.grab { align-self: center; width: 40px; height: 5px; border-radius: 3px; background: var(--line); box-shadow: 0 0 0 14px transparent; touch-action: none; }
 .sheet-top { display: flex; align-items: center; gap: 14px; }
 .big { flex: none; width: 64px; height: 64px; border-radius: 18px; display: flex; align-items: center; justify-content: center; font: 700 24px var(--display); color: var(--on-band); }
 .big.b-mid { color: #111418; }

@@ -84,3 +84,45 @@ export function boardHTML(b, type) {
   const credit = b.mode === 'live' ? `<p class="credit">Departure and arrival information: National Rail</p>` : '';
   return `${msgs}<div class="bhead"><span>Due</span><span>Exp</span><span>${type === 'arr' ? 'From' : 'To'}</span><span>Plat</span></div>${rows}${credit}`;
 }
+
+// ---- swipe a sheet down to close it (the grab handle at the top) ----
+// Works for every sheet: pulling down from the handle or header, or from the list once
+// it's scrolled to the top, slides the sheet away; a short pull springs back.
+{
+  let startY = 0, dy = 0, dragging = false, startT = 0, scroller = null;
+  const reset = () => { $card.style.transition = ''; $card.style.transform = ''; $sheet.style.background = ''; };
+  $card.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1 || e.target.closest('input, .segctl, .results')) return;
+    scroller = e.target.closest('.sheet-body');
+    startY = e.touches[0].clientY; startT = Date.now(); dy = 0; dragging = false;
+  }, { passive: true });
+  $card.addEventListener('touchmove', (e) => {
+    if (!startY) return;
+    const d = e.touches[0].clientY - startY;
+    if (!dragging) {
+      // only a downward pull, and not while the list is scrolled down
+      if (d < 8 || (scroller && scroller.scrollTop > 0)) { if (d < -8 || (scroller && scroller.scrollTop > 0)) startY = 0; return; }
+      dragging = true;
+      $card.style.transition = 'none';
+    }
+    dy = Math.max(0, d);
+    e.preventDefault();
+    $card.style.transform = `translateY(${dy}px)`;
+  }, { passive: false });
+  const end = () => {
+    if (!dragging) { startY = 0; return; }
+    const fast = dy / Math.max(1, Date.now() - startT) > 0.6;
+    dragging = false; startY = 0;
+    if (dy > Math.min(140, $card.offsetHeight * 0.3) || (fast && dy > 40)) {
+      $card.style.transition = 'transform 0.18s ease-in';
+      $card.style.transform = `translateY(${$card.offsetHeight + 40}px)`;
+      setTimeout(() => { const btn = $card.querySelector('.close'); reset(); if (btn) btn.click(); }, 170);
+    } else {
+      $card.style.transition = 'transform 0.2s ease-out';
+      $card.style.transform = '';
+      setTimeout(reset, 220);
+    }
+  };
+  $card.addEventListener('touchend', end);
+  $card.addEventListener('touchcancel', end);
+}
