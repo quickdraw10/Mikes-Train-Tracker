@@ -25,7 +25,9 @@ export const PRESETS = [
   preset('gwml', 'Great Western Main Line', 'PAD RDG DID SWI CPM BTH BRI'),
   preset('bml', 'Brighton Main Line', 'VIC CLJ ECR GTW HHE BTN'),
   preset('yrk-lds', 'York – Leeds', 'YRK ULL CHF MIK GRF CRG LDS'),
-  preset('yrk-sca', 'York – Scarborough', 'YRK MLT SEM SCA')
+  preset('yrk-sca', 'York – Scarborough', 'YRK MLT SEM SCA'),
+  preset('lds-hul', 'Leeds – Hull', 'LDS CRG GRF MIK SBY HOW GBD BUH HUL'),
+  preset('bri-pnz', 'Bristol – Penzance', 'BRI WSM TAU TVP EXD NTA PLY BOD TRU RED SER PNZ')
 ];
 
 // A route is { id, name, crs: [...] } with at least two stations the app knows
@@ -44,7 +46,7 @@ export function setRoute(r) {
   const c = cleanRoute(r);
   if (!c) return null;
   try { localStorage.setItem(ROUTE_KEY, JSON.stringify(c)); } catch { /* not saved */ }
-  if (!PRESETS.some((p) => p.id === c.id)) {
+  if (!PRESETS.some((p) => p.id === c.id.replace(/~r$/, ''))) {
     const recent = loadList(RECENT_KEY).filter((x) => x.id !== c.id);
     recent.unshift(c);
     saveList(RECENT_KEY, recent.slice(0, 6));

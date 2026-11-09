@@ -338,3 +338,5 @@ button.sname { border: 0; padding: 0; background: none; color: var(--text); text
 .nw .nw-stn { fill: #030406; stroke: #F2F4F7; stroke-width: 1; pointer-events: none; }
 .nw .nw-stn.big { fill: #030406; stroke: #E3B53A; stroke-width: 1.6; pointer-events: auto; cursor: pointer; }
 .nw .nw-lbl { fill: #B98CFF; font: 700 7.5px var(--mono); letter-spacing: 0.06em; cursor: pointer; }
+.rh-btns { display: flex; gap: 8px; flex: none; }
+.change.flip { width: 36px; padding: 0; font-size: 18px; }

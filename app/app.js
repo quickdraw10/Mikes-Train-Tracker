@@ -196,7 +196,7 @@ function renderRoute() {
   const r = route.currentRoute();
   const d = routeData && routeData.id === r.id && !routeData.error ? routeData : null;
   const first = esc(BY_CRS.get(r.crs[0]).name), last = esc(BY_CRS.get(r.crs[r.crs.length - 1]).name);
-  const head = `<header class="head route-head"><div class="rh-top"><h1>${esc(r.name)}</h1><button class="change" data-act-route="pick">Change</button></div>
+  const head = `<header class="head route-head"><div class="rh-top"><h1>${esc(r.name)}</h1><div class="rh-btns"><button class="change flip" data-act-route="flip" aria-label="Swap top and bottom: put ${last} at the top">⇅</button><button class="change" data-act-route="pick">Change</button></div></div>
     <div class="sub">${r.crs.length} stations · ${route.routeKm(r)} km${d ? ' · ' + (d.mode === 'live' ? '<span class="pill live">Live</span>' : '<span class="pill demo">Demo</span>') + ' ' + hhmm(d.updated) : ''}</div></header>`;
   if (routeData && routeData.error && routeData.id === r.id) return head + `<div class="empty">${esc(routeData.error)}</div>`;
   if (!d) return head + `<div class="empty">Finding trains on this route…</div>`;
@@ -247,6 +247,12 @@ function renderRoute() {
     <p class="note">↓ towards ${last}, ↑ towards ${first}. Trains within a few km of the line are shown; a section keeps the colour of the last train through it for 20 minutes.</p>`;
 }
 
+// Swap which end is at the top
+function flipRoute() {
+  const cur = route.currentRoute();
+  useRoute({ id: cur.id.endsWith('~r') ? cur.id.slice(0, -2) : cur.id + '~r', name: cur.name.includes(' – ') ? cur.name.split(' – ').reverse().join(' – ') : cur.name, crs: [...cur.crs].reverse() });
+}
+
 // Choosing a route: main lines, your recent routes, or build one
 function routePicker() {
   const cur = route.currentRoute();
@@ -262,7 +268,7 @@ function routePicker() {
     </div>`, {
     preset: (id) => useRoute(route.PRESETS.find((r) => r.id === id)),
     recent: (id) => useRoute(recent.find((r) => r.id === id)),
-    reverse: () => useRoute({ name: cur.name.includes(' – ') ? cur.name.split(' – ').reverse().join(' – ') : cur.name + ' (reversed)', crs: [...cur.crs].reverse() }),
+    reverse: () => flipRoute(),
     build: () => routeBuilder()
   });
 }
@@ -373,7 +379,12 @@ $view.addEventListener('click', (e) => {
   const rt = e.target.closest('[data-rtrain]');
   if (rt) { const t = routeData && routeData.trains.find((x) => x.id === rt.dataset.rtrain); if (t) trainSheet(t); return; }
   const ra = e.target.closest('[data-act-route]');
-  if (ra) { if (ra.dataset.actRoute === 'pick') routePicker(); else stationSheet(ra.dataset.crs); return; }
+  if (ra) {
+    if (ra.dataset.actRoute === 'pick') routePicker();
+    else if (ra.dataset.actRoute === 'flip') flipRoute();
+    else stationSheet(ra.dataset.crs);
+    return;
+  }
   const el = e.target.closest('[data-train]');
   if (el) openSheet(el.dataset.train);
 });

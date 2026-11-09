@@ -22,17 +22,22 @@ export const LINES = [
   line('tpe', 'Liverpool – Leeds', 'LIV NLW MAN SYB HUD LDS'),
   line('yrk', 'Leeds – York', 'LDS CRG GRF MIK CHF ULL YRK'),
   line('sca', 'York – Scarborough', 'YRK MLT SEM SCA'),
+  line('hull', 'Leeds – Hull', 'MIK SBY HOW GBD BUH HUL'),
+  line('hulld', 'Doncaster – Hull', 'DON TNN GOO GBD'),
   line('mml', 'Midland Main Line', 'STP LUT BDM WEL KET MHR LEI LBO EMD DBY CHD SHF'),
   line('xc', 'Cross Country', 'BRI CNM BHM TAM BUT DBY'),
   line('gwml', 'Great Western Main Line', 'PAD RDG DID SWI CPM BTH BRI'),
+  line('west', 'Bristol – Penzance', 'BRI WSM TAU TVP EXD NTA PLY BOD TRU RED SER PNZ'),
+  line('bh', 'Reading – Taunton (Berks & Hants)', 'RDG NBY PEW WSB CLC TAU'),
   line('swales', 'South Wales Main Line', 'SWI BPW NWP CDF SWA'),
   line('geml', 'Great Eastern Main Line', 'LST SRA CHM COL IPS DIS NRW'),
   line('hs1', 'High Speed 1', 'STP SFA EBD AFK'),
   line('swml', 'South Western Main Line', 'WAT CLJ WOK BSK WIN SOU BMH'),
   line('bml', 'Brighton Main Line', 'VIC CLJ ECR GTW HHE BTN')
 ];
-const LABELS = { KGX: 'London', EDB: 'Edinburgh', GLC: 'Glasgow', ABD: 'Aberdeen', NCL: 'Newcastle', YRK: 'York', LDS: 'Leeds', MAN: 'Manchester', LIV: 'Liverpool', SHF: 'Sheffield', DON: 'Doncaster', CRE: 'Crewe', BHM: 'Birmingham', PBO: 'Peterborough', DBY: 'Derby', LEI: 'Leicester', BRI: 'Bristol', CDF: 'Cardiff', SWA: 'Swansea', RDG: 'Reading', NRW: 'Norwich', SOU: 'Southampton', BTN: 'Brighton', AFK: 'Ashford', CAR: 'Carlisle', PRE: 'Preston', SCA: 'Scarborough', DEE: 'Dundee', BMH: 'Bournemouth' };
-const LEFT_LABEL = new Set(['LIV', 'GLC', 'PRE', 'CAR', 'CRE', 'BRI', 'CDF', 'SWA', 'BMH', 'SOU', 'BHM', 'RDG']);
+const LABELS = { KGX: 'London', EDB: 'Edinburgh', GLC: 'Glasgow', ABD: 'Aberdeen', NCL: 'Newcastle', YRK: 'York', LDS: 'Leeds', MAN: 'Manchester', LIV: 'Liverpool', SHF: 'Sheffield', DON: 'Doncaster', CRE: 'Crewe', BHM: 'Birmingham', PBO: 'Peterborough', DBY: 'Derby', LEI: 'Leicester', BRI: 'Bristol', CDF: 'Cardiff', SWA: 'Swansea', RDG: 'Reading', NRW: 'Norwich', SOU: 'Southampton', BTN: 'Brighton', AFK: 'Ashford', CAR: 'Carlisle', PRE: 'Preston', SCA: 'Scarborough', DEE: 'Dundee', BMH: 'Bournemouth', HUL: 'Hull', EXD: 'Exeter', PLY: 'Plymouth', PNZ: 'Penzance', TAU: 'Taunton' };
+const BELOW_LABEL = new Set(['PNZ']);
+const LEFT_LABEL = new Set(['PLY', 'EXD', 'TAU', 'SBY', 'LIV', 'GLC', 'PRE', 'CAR', 'CRE', 'BRI', 'CDF', 'SWA', 'BMH', 'SOU', 'BHM', 'RDG']);
 
 // Map tiles that cover the lines, each fetched once
 function tiles() {
@@ -117,7 +122,8 @@ function svg() {
     g += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${big ? 3.4 : 1.8}" class="nw-stn${big ? ' big' : ''}" data-crs="${c}"/>`;
     if (big) {
       const left = LEFT_LABEL.has(c);
-      g += `<text x="${(x + (left ? -6 : 6)).toFixed(1)}" y="${(y + 3).toFixed(1)}" class="nw-lbl" text-anchor="${left ? 'end' : 'start'}" data-crs="${c}">${esc(big.toUpperCase())}</text>`;
+      if (BELOW_LABEL.has(c)) g += `<text x="${(x - 4).toFixed(1)}" y="${(y + 13).toFixed(1)}" class="nw-lbl" text-anchor="start" data-crs="${c}">${esc(big.toUpperCase())}</text>`;
+      else g += `<text x="${(x + (left ? -6 : 6)).toFixed(1)}" y="${(y + 3).toFixed(1)}" class="nw-lbl" text-anchor="${left ? 'end' : 'start'}" data-crs="${c}">${esc(big.toUpperCase())}</text>`;
     }
   }
   g += `<text x="${W / 2}" y="22" class="lbl big" text-anchor="middle">NETWORK</text>`;
