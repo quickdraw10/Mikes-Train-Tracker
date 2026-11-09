@@ -241,6 +241,13 @@ document.getElementById('sel-bar').addEventListener('click', (e) => {
   else if (selected) trainSheet(selected);
 });
 
+// A board row as a train for the train screen, looked up from the board itself
+export function boardTrain(row, crs, type, back) {
+  return { id: null, code: row.headcode || '', delay: row.delay, cancelled: row.cancelled, toc: row.toc,
+    dest: type === 'dep' ? row.place : null, origin: type === 'arr' ? row.place : null,
+    boardRef: { crs, type, id: row.id }, back: back || null };
+}
+
 // "14:32", "14:37" -> 5, across midnight; null if either is missing
 function minsLate(booked, actual) {
   const m = (x) => { const r = /^(\d\d):(\d\d)/.exec(x || ''); return r ? Number(r[1]) * 60 + Number(r[2]) : null; };
@@ -258,7 +265,7 @@ export async function trainSheet(t) {
   let d = null;
   let detailed = false;
   const html = () => {
-    const delay = d ? d.delay : t.delay, cancelled = d ? d.cancelled : t.cancelled;
+    const delay = d && d.delay !== undefined ? d.delay : t.delay, cancelled = d && d.cancelled !== undefined ? d.cancelled : t.cancelled;
     const bd = bandOf(delay, cancelled);
     const origin = (d && d.origin) || t.origin, dest = (d && d.dest) || t.dest;
     const title = origin && dest ? `${esc(origin)} → ${esc(dest)}` : dest ? `To ${esc(dest)}` : origin ? `From ${esc(origin)}` : 'Train ' + esc(t.code);
@@ -284,7 +291,7 @@ export async function trainSheet(t) {
       else if (s.state === 'passed') {
         // the time it actually got there and how late it was at that point
         const late = typeof s.late === 'number' ? s.late : minsLate(s.pass ? (s.working || s.booked) : s.booked, actual);
-        const lb = late == null ? '' : `<small class="c-${bandOf(late)}">${late >= 1 ? '+' + late : late <= -1 ? -late + ' early' : 'On time'}</small>`;
+        const lb = late == null || !actual ? '' : `<small class="c-${bandOf(late)}">${late >= 1 ? '+' + late : late <= -1 ? -late + ' early' : 'On time'}</small>`;
         right = actual ? `${esc(actual)}${lb}` : '<small class="c-none">No report</small>';
       }
       else if (s.expected && s.expected !== s.booked && /\d/.test(s.expected)) right = `<span class="c-${bd}">${esc(s.expected)}</span>`;
@@ -300,21 +307,27 @@ export async function trainSheet(t) {
     ].filter(Boolean) : [];
     const toggle = passCount ? `<button class="detail-toggle" data-act="detail" aria-pressed="${detailed}">${detailed ? 'Hide' : 'Show'} ${passCount} passing point${passCount === 1 ? '' : 's'}</button>` : '';
     const source = d && d.source === 'darwin' ? '<p class="credit">Stops ahead live from National Rail</p>' : d && d.liveNote ? `<p class="credit">${esc(d.liveNote)}</p>` : '';
-    return `<div class="sheet-top"><div class="big b-${bd}">${esc(shortLate(delay, cancelled))}</div>
-      <div><div class="meta">${esc(t.code)}${op ? ' · ' + opBadge(op, d && d.operatorCode) + esc(op) : ''}</div><h2 id="sheet-title">${title}</h2><p class="c-${bd === 'none' ? 'none' : bd}">${esc(lateText(delay, cancelled))}</p></div></div>
+    const code = (d && d.code) || t.code || '';
+    return `${t.back ? '<button class="back-link" data-act="back">‹ Back to the board</button>' : ''}<div class="sheet-top"><div class="big b-${bd}">${esc(shortLate(delay, cancelled))}</div>
+      <div><div class="meta">${esc(code)}${op ? ' · ' + opBadge(op, d && d.operatorCode) + esc(op) : ''}</div><h2 id="sheet-title">${title}</h2><p class="c-${bd === 'none' ? 'none' : bd}">${esc(lateText(delay, cancelled))}</p></div></div>
       ${next}
       ${last ? `<p class="lastseen">${esc(last.event || 'Seen')} ${esc(last.name)}${last.at ? ' at ' + hhmm(last.at) : ''}</p>` : ''}
-      ${extras.length ? `<p class="lastseen">${extras.join(' · ')}</p>` : ''}
+      ${extras.map((x) => `<p class="lastseen">${x}</p>`).join('')}
       <div class="sheet-body">${!d ? '<div class="empty">Loading stops…</div>' : stops + toggle + source}</div>
-      <div class="sheet-actions"><button data-act="onmap">Show on map</button>${d && d.stops && routeFromStops(d.stops) ? '<button data-act="route">Make this my route</button>' : ''}</div>`;
+      <div class="sheet-actions">${t.id ? '<button data-act="onmap">Show on map</button>' : ''}${d && d.stops && routeFromStops(d.stops) ? '<button data-act="route">Make this my route</button>' : ''}</div>`;
   };
   const load = async () => {
-    d = await api.train(t.id).catch(() => null);
-    if (d && d.error) d = null;
+    if (t.boardRef) {
+      const r = t.boardRef;
+      d = await api.service(r.crs, r.type, r.id).catch(() => null);
+      if (d && d.natId) t.id = d.natId; // the train we're tracking: lets it be shown on the map
+    } else d = await api.train(t.id).catch(() => null);
+    if (d && d.error) { if (t.boardRef && sheetOpen()) updateSheet(html().replace('Loading stops…', esc(d.error))); d = null; return; }
     if (sheetOpen()) updateSheet(html());
   };
   openSheet(html(), {
     detail: () => { detailed = !detailed; updateSheet(html()); },
+    back: () => { if (t.back) t.back(); },
     onmap: () => { closeCustomSheet(); window.dispatchEvent(new CustomEvent('mtt:showtrain', { detail: { train: t } })); },
     route: () => {
       const origin = (d && d.origin) || t.origin, dest = (d && d.dest) || t.dest;
@@ -368,6 +381,8 @@ export async function stationSheet(crs, type = 'dep') {
   openSheet(html(), {
     type: (t) => { current = t; data = null; updateSheet(html()); load(); },
     watch: () => { watchArea(st); updateSheet(html()); },
+    // a train on the board: its own screen, with a way back to this board
+    svc: (id) => { const row = data && data.services && data.services.find((x) => x.id === id); if (row) trainSheet(boardTrain(row, crs, current, () => stationSheet(crs, current))); },
     build: () => { closeCustomSheet(); window.dispatchEvent(new CustomEvent('mtt:build', { detail: { crs } })); },
     save: () => {
       const list = loadList(STATIONS_KEY);

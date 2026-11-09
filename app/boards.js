@@ -4,6 +4,7 @@
 import * as api from './api.js';
 import { BY_CRS, nearest, searchStations } from './geo.js';
 import { esc, loadList, saveList, toast, boardHTML } from './ui.js';
+import { trainSheet, boardTrain } from './mapview.js';
 
 const STATIONS_KEY = 'mtt.stations';
 const $root = document.getElementById('boardsview');
@@ -32,6 +33,7 @@ function wire() {
     if (act === 'type') { type = el.dataset.arg; data = null; render(); load(); }
     if (act === 'back') { current = null; clearInterval(timer); render(); }
     if (act === 'near') findNear();
+    if (act === 'svc') { const row = data && data.services && data.services.find((x) => x.id === el.dataset.arg); if (row) trainSheet(boardTrain(row, current.crs, type)); }
     if (act === 'save') {
       const list = loadList(STATIONS_KEY);
       if (list.some((s) => s.crs === current.crs)) saveList(STATIONS_KEY, list.filter((s) => s.crs !== current.crs));

@@ -6,7 +6,7 @@
 //                (falls back to LDB_KEY if not set)
 // Boards are cached for 30 seconds so many phones don't multiply requests.
 
-import { staffBoard, staffEnabled, hm, textOf, expectedOf } from './staff.js';
+import { staffBoard, staffEnabled, hm, textOf, expectedOf, serviceToLive } from './staff.js';
 
 const DEP_BASE = process.env.LDB_DEP_BASE || 'https://api1.raildata.org.uk/1010-live-departure-board-dep1_2/LDBWS/api/20220120';
 const ARR_BASE = process.env.LDB_ARR_BASE || 'https://api1.raildata.org.uk/1010-live-arrival-board-arr/LDBWS/api/20220120';
@@ -43,10 +43,17 @@ export function normalise(data, type) {
         place: type === 'arr' ? names(s.origin) : names(s.destination),
         platform: s.platform || null,
         toc: s.operator || null, tocCode: s.operatorCode || null,
-        reason: s.cancelReason || s.delayReason || null
+        reason: s.cancelReason || s.delayReason || null,
+        next: type === 'dep' ? nextCall((s.subsequentCallingPoints || []).flatMap((g) => g.callingPoint || [])) : null
       };
     });
   return { mode: 'live', crs: data.crs, name: data.locationName, type, services, messages: (data.nrccMessages || []).map((m) => (m.Value || m.value || '').replace(/<[^>]+>/g, '')).filter(Boolean) };
+}
+
+// The next place the train calls at (not passing points or cancelled stops)
+function nextCall(list) {
+  const n = (list || []).find((l) => !l.isPass && !l.isOperational && !l.isCancelled && l.et !== 'Cancelled' && l.locationName);
+  return n ? n.locationName : null;
 }
 
 // Departures from the Staff Version (the main source): adds headcodes, hidden
@@ -64,7 +71,8 @@ export function normaliseStaff(data) {
       place: names(s.destination) || '—', platform: s.platform || null, platformHidden: Boolean(s.platformIsHidden),
       toc: s.operator || null, tocCode: s.operatorCode || null, passenger: s.isPassengerService !== false,
       reason: textOf(s.cancelReason, 'canc') || textOf(s.delayReason, 'late') || null,
-      length: Number(s.length) || null
+      length: Number(s.length) || null,
+      next: nextCall(s.subsequentLocations)
     };
   });
   return { mode: 'live', source: 'staff', crs: data.crs, name: data.locationName, type: 'dep', services, messages: [] };
@@ -92,4 +100,42 @@ export async function getBoard(crs, type = 'dep') {
   cache.set(ck, { at: Date.now(), data });
   if (cache.size > 500) cache.delete(cache.keys().next().value);
   return data;
+}
+
+// One train from a station board, for its own screen: where it has been (with actual
+// times) and where it is going, straight from National Rail. Staff departures use the
+// Staff Version; arrivals use the arrival board's calling points.
+export async function serviceDetail(crs, type, id, station) {
+  if (type === 'dep' && staffEnabled()) {
+    const b = await staffBoard(crs);
+    const svc = b && !b.error && (b.trainServices || []).find((x) => (x.rid || x.uid) === id);
+    if (svc) {
+      const live = serviceToLive(svc, station);
+      const passed = live.previous.filter((p) => !p.pass).map((p) => ({ name: p.name, crs: p.crs, booked: p.booked, actual: p.actual, state: 'passed' }));
+      const ahead = live.stops.map((x) => ({ ...x, state: x.actual && x !== live.stops[0] ? 'passed' : 'due' }));
+      const stops = [...passed, ...ahead];
+      return { mode: 'live', source: 'darwin', code: live.headcode, uid: live.uid, operator: live.operator, operatorCode: live.operatorCode,
+        origin: live.origin, dest: live.dest, length: live.length, cancelled: live.cancelled, cancelReason: live.cancelReason, delayReason: live.delayReason,
+        stops, next: ahead.find((x) => x.state === 'due' && !x.pass && !x.cancelled) || null, matched: true };
+    }
+  }
+  if (type === 'arr') {
+    const key = process.env.LDB_ARR_KEY || process.env.LDB_KEY;
+    if (!key) return { error: 'No arrivals key set' };
+    const res = await fetch(`${ARR_BASE}/GetArrBoardWithDetails/${encodeURIComponent(crs)}?numRows=15`, { headers: { 'x-apikey': key }, signal: AbortSignal.timeout(10000) });
+    if (!res.ok) return { error: `National Rail returned ${res.status}` };
+    const data = await res.json();
+    const svc = (data.trainServices || []).find((x) => x.serviceID === id);
+    if (!svc) return { error: 'This train has left the board.' };
+    const pts = (svc.previousCallingPoints || []).flatMap((g) => g.callingPoint || []);
+    const t = (v) => (/\d\d:\d\d/.test(v || '') ? v : null);
+    const stops = pts.map((c) => ({ name: c.locationName, crs: c.crs, booked: c.st, state: t(c.at) ? 'passed' : 'due',
+      actual: t(c.at), expected: c.et === 'Cancelled' ? null : c.et === 'On time' ? c.st : t(c.et) || c.et, cancelled: c.et === 'Cancelled' || c.isCancelled }));
+    stops.push({ name: station.name, crs, booked: svc.sta, state: 'due', expected: svc.eta === 'On time' ? svc.sta : t(svc.eta) || svc.eta, platform: svc.platform || null, cancelled: svc.eta === 'Cancelled' });
+    return { mode: 'live', source: 'darwin', code: null, operator: svc.operator, operatorCode: svc.operatorCode,
+      origin: names(svc.origin), dest: names(svc.destination), length: Number(svc.length) || null, cancelled: Boolean(svc.isCancelled),
+      cancelReason: svc.cancelReason || null, delayReason: svc.delayReason || null,
+      stops, next: stops.find((x) => x.state === 'due' && !x.cancelled) || null, matched: true };
+  }
+  return { error: 'Details for this train aren\'t available from this board.' };
 }

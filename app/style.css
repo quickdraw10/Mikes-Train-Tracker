@@ -401,3 +401,8 @@ body.panel-portrait .turn-hint { display: block; }
 .stop .sa small { display: block; font: 600 11px var(--body); }
 button.mrow { width: 100%; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .iecc .hcbox.grp text { font-size: 8px; }
+button.brow { width: 100%; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.bplace small { display: block; }
+.bplace .bnext { color: var(--text); }
+.bplace .breason { color: var(--mid); }
+.back-link { align-self: flex-start; min-height: 36px; padding: 0; border: 0; background: none; color: var(--trim); font: 600 15px var(--body); cursor: pointer; flex: none; }

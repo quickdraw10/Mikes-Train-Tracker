@@ -179,6 +179,9 @@ test('Staff Version quirks: no estimate means "Delayed", reasons are codes, time
   const b = normaliseStaff({ trainServices: [{ trainid: '1E14', std: '2026-11-09T14:17:00', departureType: 'Delayed', destination: [{ locationName: 'London Kings Cross' }], platform: '9' }] });
   assert.equal(b.services[0].expected, 'Delayed');
   assert.equal(b.services[0].delay, null);
+  const b2 = normaliseStaff({ trainServices: [{ trainid: '1E14', std: '2026-11-09T14:17:00', destination: [{ locationName: 'London Kings Cross' }],
+    subsequentLocations: [{ locationName: 'COLTONJ', isPass: true }, { locationName: 'Doncaster', isCancelled: true }, { locationName: 'Newark North Gate' }] }] });
+  assert.equal(b2.services[0].next, 'Newark North Gate', 'next stop skips passing points and cancelled calls');
 });
 
 test('reason codes keep the code and add Darwin\'s meaning when the list is loaded', () => {

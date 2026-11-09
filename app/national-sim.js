@@ -117,6 +117,13 @@ export function createNationalSim(count = 900) {
     for (let i = have; i < want; i++) spawn(now, 'near', pick(local));
   }
 
+  // A train from a demo board: one of the demo trains (demo boards are invented)
+  function service(crs, type, id) {
+    if (!trains.length) return { error: 'No demo trains' };
+    let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    return train(trains[h % trains.length].code);
+  }
+
   // Train screen details in the same shape as the live service's /api/train/:id
   function train(id, now = Date.now()) {
     const t = trains.find((x) => x.code === id);
@@ -175,7 +182,7 @@ export function createNationalSim(count = 900) {
       const exp = new Date(t0 + delay * 60000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' });
       services.push({
         id: crs + i, booked: hhmm, expected: cancelled ? 'Cancelled' : delay >= 1 ? exp : 'On time', delay: cancelled ? null : delay, cancelled,
-        place: other.name, platform: String(1 + Math.floor(Math.random() * 6)), toc: pick(TOCS),
+        place: other.name, next: type === 'dep' && nb.length ? pick(nb).name : null, length: 2 + 2 * Math.floor(Math.random() * 4), platform: String(1 + Math.floor(Math.random() * 6)), toc: pick(TOCS),
         reason: cancelled ? 'This train has been cancelled because of a shortage of train crew' : delay >= 10 ? 'This train has been delayed by a fault with the signalling system' : null
       });
     }
@@ -198,5 +205,5 @@ export function createNationalSim(count = 900) {
   const start = Date.now() - 20 * 60000;
   for (let i = 0; i < count; i++) spawn(start, true);
   for (let s = 0; s <= 20; s++) tick(start + s * 60000);
-  return { tick, trains: trainsIn, board, moves, train };
+  return { tick, trains: trainsIn, board, moves, train, service };
 }

@@ -81,12 +81,18 @@ export function boardHTML(b, type) {
   const rows = b.services.map((s) => {
     const bd = s.expected === 'Delayed' && !s.cancelled ? 'mid' : bandOf(s.delay, s.cancelled);
     const exp = s.cancelled ? 'Canc' : s.expected === 'On time' ? 'On time' : s.expected || '–';
-    return `<div class="brow${s.passenger === false ? ' nonpass' : ''}">
+    const info = [
+      s.next && !s.cancelled ? `<small class="bnext">Next stop: ${esc(s.next)}</small>` : '',
+      s.toc || s.passenger === false ? `<small>${opBadge(s.toc, s.tocCode)}${esc([s.passenger === false ? 'Not in passenger service' : null, s.toc].filter(Boolean).join(' · '))}</small>` : '',
+      s.length ? `<small>${s.length} coaches</small>` : '',
+      s.reason ? `<small class="breason">${esc(s.reason)}</small>` : ''
+    ].join('');
+    return `<button class="brow${s.passenger === false ? ' nonpass' : ''}" data-act="svc" data-arg="${esc(s.id)}" aria-label="${esc((s.headcode ? s.headcode + ' ' : '') + s.place)}, details">
       <span class="btime">${esc(s.booked)}</span>
       <span class="bexp c-${bd}">${esc(s.departed ? 'Dep ' + (s.expected === 'On time' ? s.booked : s.expected) : exp)}</span>
-      <span class="bplace"><b>${s.headcode ? `<span class="hcode">${esc(s.headcode)}</span>` : ''}${esc(s.place)}</b><small>${opBadge(s.toc, s.tocCode)}${esc([s.passenger === false ? 'Not in passenger service' : null, s.toc, s.length ? s.length + ' coaches' : null, s.reason].filter(Boolean).join(' · '))}</small></span>
+      <span class="bplace"><b>${s.headcode ? `<span class="hcode">${esc(s.headcode)}</span>` : ''}${esc(s.place)}</b>${info}</span>
       <span class="bplat${s.platform ? '' : ' none'}${s.platformHidden ? ' hidden-plat' : ''}" title="${s.platformHidden ? 'Not shown on public screens' : ''}">${esc(s.platform || '–')}</span>
-    </div>`;
+    </button>`;
   }).join('');
   const msgs = (b.messages || []).map((m) => `<p class="bmsg">${esc(m)}</p>`).join('');
   const credit = b.mode === 'live' ? `<p class="credit">Departure and arrival information: National Rail</p>` : '';

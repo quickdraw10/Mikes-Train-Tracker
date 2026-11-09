@@ -54,3 +54,11 @@ export async function train(id) {
   if (mode === 'demo') return sim.train(id);
   return get(`/api/train/${encodeURIComponent(id)}`);
 }
+
+// One train from a station board (National Rail's own record of its calls)
+export async function service(crs, type, id) {
+  await ready;
+  if (mode === 'offline') return { ...OFFLINE };
+  if (mode === 'demo') return sim.service(crs, type, id);
+  return get(`/api/service/${encodeURIComponent(crs)}?type=${type}&id=${encodeURIComponent(id)}`);
+}

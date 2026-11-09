@@ -20,12 +20,13 @@ import { handleTd } from './td.js';
 import { handleSClass } from './sclass.js';
 import { handleTrust, buildStanoxIndex, prune } from './trust.js';
 import { applyStanox, loadStanoxCrs, downloadCorpus, haveCorpus } from './corpus.js';
-import { createNational, handleNational, trainsIn, movesNear, pruneNational, attachAll, liveDetailOf, linkPanelTrains } from './national.js';
+import { createNational, handleNational, trainsIn, movesNear, pruneNational, attachAll, liveDetailOf, linkPanelTrains, pathOf } from './national.js';
 import { staffBoard, loadReasons, reasonsStatus } from './staff.js';
 import { createTimetable, loadTimetable } from './timetable.js';
 import { downloadSmart, buildStationPanel, smartDebug } from './panelbuild.js';
 import { createDecoder } from './decode.js';
-import { getBoard } from './ldb.js';
+import { getBoard, serviceDetail } from './ldb.js';
+import { BY_CRS } from '../app/geo.js';
 import { createNationalSim } from '../app/national-sim.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -143,6 +144,13 @@ if (live) {
     trains: (box, max) => trainsIn(nat, box, Date.now(), max),
     moves: (lat, lon, r) => movesNear(nat, lat, lon, r),
     board: (crs, type) => getBoard(crs, type),
+    service: async (crs, type, id) => {
+      const st = BY_CRS.get(crs) || { name: crs, crs };
+      const d = await serviceDetail(crs, type, id, st);
+      // link to the train we're tracking, for its route on the map
+      if (!d.error && d.uid) { for (const t of nat.trains.values()) if (t.uid === d.uid && (!d.code || t.code === d.code)) { d.natId = t.id; d.path = pathOf(nat, t); break; } }
+      return d;
+    },
     train: (id) => liveDetailOf(nat, id)
   };
 } else {
@@ -151,7 +159,7 @@ if (live) {
   setInterval(() => { sim.tick(); schedulePush(); }, 4000);
   const nsim = createNationalSim();
   setInterval(() => nsim.tick(), 10000);
-  national = { trains: (box) => nsim.trains(box), moves: nsim.moves, board: nsim.board, train: nsim.train };
+  national = { trains: (box) => nsim.trains(box), moves: nsim.moves, board: nsim.board, train: nsim.train, service: (crs, type, id) => nsim.service(crs, type, id) };
   console.log('No NR_USER / NR_PASS set — running on demo trains.');
 }
 
@@ -221,6 +229,13 @@ const server = http.createServer((req, res) => {
     const id = url.searchParams.get('id');
     if (id) return json(200, panelDebug[id] || { note: 'Still loading SMART, or no such panel. Panels: ' + STATION_PANELS.map((p) => p.id).join(', ') });
     return json(200, Object.fromEntries(Object.entries(panelDebug).map(([k, v]) => [k, { areas: v.areas, stationRows: v.stationRows, built: v.built, more: `/api/panel-debug?id=${k}` }])));
+  }
+  const sv = /^\/api\/service\/([A-Za-z]{3})$/.exec(url.pathname);
+  if (sv) {
+    const type = url.searchParams.get('type') === 'arr' ? 'arr' : 'dep';
+    Promise.resolve(national.service(sv[1].toUpperCase(), type, url.searchParams.get('id') || ''))
+      .then((d) => json(200, d)).catch((e) => json(502, { error: e.message }));
+    return;
   }
   const bm = /^\/api\/board\/([A-Za-z]{3})$/.exec(url.pathname);
   if (bm) {
