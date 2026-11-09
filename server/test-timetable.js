@@ -99,16 +99,21 @@ test('York panel: one road per platform, approach berths on the correct side', (
   ] };
   const p = buildStationPanel(smart, { id: 'york', name: 'York', area: 'Y1', stanme: 'YORK', ends: ['S', 'N'] });
   assert.deepEqual(p.tracks.map((t) => t.name), ['5', '10']);
-  const road5 = Object.fromEntries(p.tracks[0].berths.map((b) => [b.id, b]));
+  const road5 = Object.fromEntries(p.tracks[0].berths.flatMap((b) => (b.keys || ['Y1:' + b.id]).map((k) => [k.split(':')[1], b])));
   assert.equal(road5['0510'].kind, 'platform');
-  assert.ok(road5['0500'].col <= 2 && road5['0501'].col <= 2, 'south approaches on the left');
-  assert.ok(road5['0520'].col >= 5 && road5['0530'].col >= 5, 'north approaches on the right');
-  // a berth further out is on a main-line track at the south (left) end, 1 step out, trains coming in
-  const [li, d] = p.laneOf['Y1:0490'];
-  assert.equal(d, 1);
-  assert.equal(p.lanes[li].side, 0);
-  assert.equal(p.lanes[li].dir, 'in');
-  assert.deepEqual(p.lanes[li].feeds, [0], 'it leads into road 5');
+  assert.ok(road5['0500'].col <= 4 && road5['0501'].col <= 4, 'south approaches on the left');
+  assert.ok(road5['0520'].col >= 7 && road5['0530'].col >= 7, 'north approaches on the right');
+  assert.equal(road5['0490'].col, 3, 'one step further out, from the stepping table');
+});
+
+test('a berth leading to two platforms is drawn once, with a switch to the other road', () => {
+  const R = (from, to, ev, plat) => ({ TD: 'Y1', FROMBERTH: from, TOBERTH: to, EVENT: ev, PLATFORM: plat, STANME: 'YORK', STEPTYPE: 'B' });
+  const smart = { BERTHDATA: [R('0100', '0110', 'C', '1'), R('0100', '0210', 'C', '2'), R('0100', '0310', 'C', '3'), R('0090', '0100', '', '')] };
+  const p = buildStationPanel(smart, { id: 'y', name: 'Y', area: 'Y1', stanme: 'YORK', ends: ['S', 'N'] });
+  const drawn = p.tracks.flatMap((t, i) => t.berths.filter((b) => b.id === '0100').map(() => i));
+  assert.deepEqual(drawn, [1], 'on the middle road only');
+  assert.ok(p.links.includes('1:4>0:5') && p.links.includes('1:4>2:5'), 'switches to roads 1 and 3');
+  assert.equal(p.tracks[1].berths.find((b) => b.id === '0090').col, 3);
 });
 
 test('panel by STANOX: platforms split across two TD areas, berth numbers kept apart', () => {

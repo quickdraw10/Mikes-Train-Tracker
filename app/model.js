@@ -60,12 +60,12 @@ export function buildView(raw, now = Date.now(), panelDefs = PANELS) {
       })
     }));
     late.sort((a, b) => (b.delay || 0) - (a.delay || 0));
-    const lanes = p.lanes ? laneTrains(raw, p.lanes, p.laneOf) : null;
+    const edges = p.beyond ? beyondTrains(raw, p.beyond) : null;
     // the most recent message from any of the panel's areas
     const heard = Math.max(0, ...(p.areas || [p.area]).map((a) => (raw.areaSeen && raw.areaSeen[a]) || 0)) || null;
     // Live only: an area that has sent nothing (not even a heartbeat) for 5 minutes is probably down
     const quietMins = raw.mode === 'live' ? (heard ? Math.floor((now - heard) / 60000) : null) : 0;
-    return { id: p.id, name: p.name, subtitle: p.subtitle, area: p.area, areas: p.areas || [p.area], ends: p.ends, style: p.style || null, note: p.note || null, crs: p.crs || null, tracks, late, quietMins, lanes };
+    return { id: p.id, name: p.name, subtitle: p.subtitle, area: p.area, areas: p.areas || [p.area], ends: p.ends, style: p.style || null, note: p.note || null, crs: p.crs || null, cols: p.cols || 8, links: p.links || [], tracks, late, quietMins, edges };
   });
 
   const routes = ROUTES.map((r) => {
@@ -100,17 +100,16 @@ export function buildView(raw, now = Date.now(), panelDefs = PANELS) {
   return { mode: raw.mode, updated: raw.updated || now, panels, routes };
 }
 
-// Trains on the main-line tracks either side of a station panel, straight from the
-// signalling berths. Each track's direction (into or away from the station) comes from
-// Network Rail's berth stepping data, so nothing is estimated. Nearest the station first.
-export function laneTrains(raw, lanes, laneOf) {
-  const out = lanes.map((l) => ({ side: l.side, dir: l.dir, feeds: l.feeds, trains: [] }));
+// Trains further out than the panel draws, straight from the signalling berths, listed
+// against the outermost drawn berth they lead to (nearest first). Nothing is estimated.
+export function beyondTrains(raw, beyond) {
+  const out = {};
   for (const [k, code] of Object.entries(raw.berths)) {
-    const at = laneOf[k];
+    const at = beyond[k];
     if (!at || !code) continue;
     const tr = raw.trains[code];
-    out[at[0]].trains.push({ code, dist: at[1], natId: tr ? tr.natId || null : null, delay: tr ? tr.delay : null, cancelled: !!(tr && tr.cancelled), band: band(tr) });
+    (out[at[0]] ||= []).push({ code, dist: at[1], natId: tr ? tr.natId || null : null, delay: tr ? tr.delay : null, cancelled: !!(tr && tr.cancelled), band: band(tr) });
   }
-  for (const l of out) l.trains.sort((a, b) => a.dist - b.dist);
+  for (const l of Object.values(out)) l.sort((a, b) => a.dist - b.dist);
   return out;
 }

@@ -75,8 +75,7 @@ function findTrain(code) {
 // ---------- A: signal box panel ----------
 // Design A, drawn like a signaller's IECC screen: black background, grey track,
 // occupied track lit white, headcodes in boxes coloured by delay, tiny signal heads.
-const SVGW = 400, COLW = 41, X0 = 56, ROWH = 32, TOP = 56;
-const colX = (c) => X0 + c * COLW;
+const PW = 760; // the panel is drawn landscape
 
 function panelChips() {
   return `<div class="pchips" role="tablist" aria-label="Choose a signal panel">${ui.view.panels.map((x, i) => `<button role="tab" class="pchip" data-panel="${i}" aria-selected="${i === ui.panel}">${esc(x.name)}</button>`).join('')}</div>`;
@@ -95,75 +94,43 @@ function renderPanel() {
   }
 
   const n = p.tracks.length;
-  const lanes = p.lanes && p.lanes.length ? p.lanes : null;
-  // With real main-line tracks the roads sit in the middle (columns 1-6) and the
-  // main lines take the edges; without them (demo) the roads use the full width.
-  const cw = lanes ? 32 : COLW, bw = lanes ? 30 : 34;
-  const cx = lanes ? (c) => 120 + (c - 1) * cw : colX;
-  const rowY = (i) => TOP + i * ROWH + ROWH / 2;
-  const L = 6, R = SVGW - 6;
-  // main-line track heights: next to the roads they lead into, never overlapping
-  const laneY = new Map();
-  let H = TOP + n * ROWH + 44;
-  if (lanes) {
-    for (const side of [0, 1]) {
-      // centred on the roads it serves, on the gap between two roads so it reads as its own track
-      const gapY = (y) => TOP + Math.max(0, Math.round((y - TOP) / ROWH)) * ROWH;
-      const mine = lanes.map((l, i) => ({ l, i, want: gapY(l.feeds.length ? l.feeds.reduce((a, f) => a + rowY(f), 0) / l.feeds.length : rowY(0)) })).filter((x) => x.l.side === side).sort((a, b) => a.want - b.want);
-      let y = TOP - 24;
-      for (const x of mine) { y = Math.max(x.want, y + 24); laneY.set(x.i, y); }
-      H = Math.max(H, y + 44);
-    }
-  }
+  const W = PW, cols = p.cols || 8, edges = p.edges || null;
+  const M = edges ? 66 : 16;                         // side margins: trains further out are listed there
+  const cw = (W - 2 * M) / cols, bw = Math.min(34, cw - 6);
+  const cx = (c) => M + (c + 0.5) * cw;
+  const ROW = 30, TOPY = 52;
+  const rowY = (i) => TOPY + i * ROW + ROW / 2;
+  const H = TOPY + n * ROW + 34;
+  const L = 6, R = W - 6;
   let g = '';
 
   // roads
   p.tracks.forEach((t, i) => {
+    if (!t.berths.length) return;
     const minCol = Math.min(...t.berths.map((b) => b.col)), maxCol = Math.max(...t.berths.map((b) => b.col));
-    const start = cx(minCol) - cw / 2, end = cx(maxCol) + cw / 2;
+    const start = cx(minCol) - cw / 2 + 1, end = cx(maxCol) + cw / 2 - 1;
     g += `<line x1="${start}" y1="${rowY(i)}" x2="${end}" y2="${rowY(i)}" class="tk"/>`;
-    if (lanes || minCol > 0) g += `<line x1="${start}" y1="${rowY(i) - 5}" x2="${start}" y2="${rowY(i) + 5}" class="tk"/>`;
-    if (lanes || maxCol < 7) g += `<line x1="${end}" y1="${rowY(i) - 5}" x2="${end}" y2="${rowY(i) + 5}" class="tk"/>`;
+    if (minCol > 0) g += `<line x1="${start}" y1="${rowY(i) - 5}" x2="${start}" y2="${rowY(i) + 5}" class="tk"/>`;
+    if (maxCol < cols - 1) g += `<line x1="${end}" y1="${rowY(i) - 5}" x2="${end}" y2="${rowY(i) + 5}" class="tk"/>`;
   });
 
-  if (lanes) {
-    // main-line tracks and the real connections into the roads they serve
-    lanes.forEach((l, li) => {
-      const y = laneY.get(li);
-      const inner = l.side === 0 ? 100 : 300, outer = l.side === 0 ? L : R;
-      for (const f of l.feeds) {
-        const t = p.tracks[f];
-        if (!t) continue;
-        const cols = t.berths.map((b) => b.col);
-        const rx = l.side === 0 ? cx(Math.min(...cols)) - cw / 2 : cx(Math.max(...cols)) + cw / 2;
-        g += `<path d="M${inner} ${y} L${rx} ${rowY(f)}" class="tk thin"/>`;
-      }
-      g += `<line x1="${outer}" y1="${y}" x2="${inner}" y2="${y}" class="tk"/>`;
-      // which way trains run on it: towards the station, or away
-      const toStation = l.dir === 'in';
-      const ax = l.side === 0 ? outer + 2 : outer - 2;
-      g += `<text x="${ax}" y="${y - 5}" class="lbl small" text-anchor="${l.side === 0 ? 'start' : 'end'}">${(l.side === 0) === toStation ? '▶' : '◀'}</text>`;
-      const slots = l.side === 0 ? [84, 52, 20] : [316, 348, 380];
-      const shown = l.trains.length > 3 ? l.trains.slice(0, 2) : l.trains.slice(0, 3);
-      shown.forEach((tr, k) => {
-        const x = slots[k];
-        g += `<line x1="${x - 15}" y1="${y}" x2="${x + 15}" y2="${y}" class="i-occglow"/><line x1="${x - 15}" y1="${y}" x2="${x + 15}" y2="${y}" class="i-occ"/>`;
-        g += `<g class="hcbox b-${tr.band}" data-train="${esc(tr.code)}" tabindex="0" role="button" aria-label="${esc(tr.code)} ${toStation ? 'approaching' : 'just left'}, ${tr.dist} sections out, ${esc(lateText(tr.delay, tr.cancelled))}">
-          <rect x="${x - bw / 2}" y="${y - 7.5}" width="${bw}" height="15" rx="1.5"/><text x="${x}" y="${y + 3.6}" text-anchor="middle">${esc(tr.code)}</text></g>`;
-      });
-      if (l.trains.length > 3) g += `<text x="${slots[2]}" y="${y + 3.6}" class="lbl small" text-anchor="middle">+${l.trains.length - 2}</text>`;
-    });
-  } else {
+  // switches between roads, straight from Network Rail's berth stepping data
+  for (const l of p.links || []) {
+    const [a, b] = l.split('>').map((x) => x.split(':').map(Number));
+    g += `<path d="M${cx(a[1]) + bw / 2} ${rowY(a[0])} L${cx(b[1]) - bw / 2} ${rowY(b[0])}" class="tk sw"/>`;
+  }
+
+  if (!p.links || !p.links.length) {
     // demo layout: each road fans into the main lines at both ends
-    const lx = colX(0) - COLW / 2 - 4, rx = colX(7) + COLW / 2 + 4, mains = 4;
-    const mainY = (k) => TOP + (n * ROWH) * (k + 0.5) / mains;
+    const lx = cx(0) - cw / 2 - 4, rx = cx(cols - 1) + cw / 2 + 4, mains = 4;
+    const mainY = (k) => TOPY + (n * ROW) * (k + 0.5) / mains;
     p.tracks.forEach((t, i) => {
       const k = Math.min(mains - 1, Math.floor(i * mains / n));
       const minCol = Math.min(...t.berths.map((b) => b.col)), maxCol = Math.max(...t.berths.map((b) => b.col));
-      if (minCol === 0) g += `<path d="M${L + 12} ${mainY(k)} L${lx} ${rowY(i)}" class="tk"/>`;
-      if (maxCol === 7) g += `<path d="M${rx} ${rowY(i)} L${R - 12} ${mainY(k)}" class="tk"/>`;
+      if (minCol === 0) g += `<path d="M${L + 10} ${mainY(k)} L${lx} ${rowY(i)}" class="tk"/>`;
+      if (maxCol === cols - 1) g += `<path d="M${rx} ${rowY(i)} L${R - 10} ${mainY(k)}" class="tk"/>`;
     });
-    for (let k = 0; k < mains; k++) g += `<line x1="${L}" y1="${mainY(k)}" x2="${L + 12}" y2="${mainY(k)}" class="tk"/><line x1="${R - 12}" y1="${mainY(k)}" x2="${R}" y2="${mainY(k)}" class="tk"/>`;
+    for (let k = 0; k < mains; k++) g += `<line x1="${L}" y1="${mainY(k)}" x2="${L + 10}" y2="${mainY(k)}" class="tk"/><line x1="${R - 10}" y1="${mainY(k)}" x2="${R}" y2="${mainY(k)}" class="tk"/>`;
   }
 
   // platforms
@@ -175,13 +142,31 @@ function renderPanel() {
     g += `<text x="${(x1 + x2) / 2}" y="${rowY(i) + 13}" class="pnum" text-anchor="middle" dy="0.1em">${esc(t.name)}</text>`;
   });
 
+  // trains further out than drawn, at each edge, nearest first
+  if (edges) {
+    p.tracks.forEach((t, i) => {
+      for (const b of t.berths) {
+        if (b.col !== 0 && b.col !== cols - 1) continue;
+        const list = edges[i + ':' + b.col];
+        if (!list || !list.length) continue;
+        const left = b.col === 0, y = rowY(i);
+        const x = left ? M / 2 : W - M / 2;
+        g += `<line x1="${left ? 4 : cx(b.col) + cw / 2}" y1="${y}" x2="${left ? cx(b.col) - cw / 2 : W - 4}" y2="${y}" class="tk"/>`;
+        const tr = list[0];
+        g += `<g class="hcbox b-${tr.band}" data-train="${esc(tr.code)}" tabindex="0" role="button" aria-label="${esc(tr.code)}, ${tr.dist} sections further out, ${esc(lateText(tr.delay, tr.cancelled))}">
+          <rect x="${x - 17}" y="${y - 7.5}" width="34" height="15" rx="1.5"/><text x="${x}" y="${y + 3.6}" text-anchor="middle">${esc(tr.code)}</text></g>`;
+        if (list.length > 1) g += `<text x="${x}" y="${y - 10}" class="lbl small" text-anchor="middle">+${list.length - 1} more</text>`;
+      }
+    });
+  }
+
   // berths: occupied track, signal heads, headcodes
   p.tracks.forEach((t, i) => {
     const y = rowY(i);
     for (const b of t.berths) {
       const x = cx(b.col);
       if (b.code) g += `<line x1="${x - cw / 2 + 2}" y1="${y}" x2="${x + cw / 2 - 2}" y2="${y}" class="i-occglow"/><line x1="${x - cw / 2 + 2}" y1="${y}" x2="${x + cw / 2 - 2}" y2="${y}" class="i-occ"/>`;
-      const sx = b.col <= 3 ? x + cw / 2 - 2 : x - cw / 2 + 2;
+      const sx = b.col < cols / 2 ? x + cw / 2 - 2 : x - cw / 2 + 2;
       const cls = b.signal === 'on' ? 'on' : b.signal === 'off' ? 'off' : 'unk';
       g += `<line x1="${sx}" y1="${y - 2}" x2="${sx}" y2="${y - 8}" class="stem"/><circle cx="${sx}" cy="${y - 10.5}" r="2.8" class="sg ${cls}"><title>Signal ${esc(p.area + b.id)}</title></circle>`;
       if (b.code) {
@@ -194,18 +179,19 @@ function renderPanel() {
   });
 
   // labels
-  g += `<text x="${SVGW / 2}" y="20" class="lbl big" text-anchor="middle">${esc(p.name.toUpperCase())}</text>`;
+  g += `<text x="${W / 2}" y="20" class="lbl big" text-anchor="middle">${esc(p.name.toUpperCase())}</text>`;
   g += `<text x="${L + 4}" y="38" class="lbl">◀ ${esc(p.ends[0])}</text><text x="${R - 4}" y="38" class="lbl" text-anchor="end">${esc(p.ends[1])} ▶</text>`;
-  g += `<text x="${L + 4}" y="${H - 14}" class="clock">${new Date(ui.view.updated).toLocaleTimeString('en-GB', { timeZone: 'Europe/London' })}</text>`;
-  g += `<text x="${R - 4}" y="${H - 14}" class="lbl small" text-anchor="end">TD ${esc(p.area)}</text>`;
+  g += `<text x="${L + 4}" y="${H - 12}" class="clock">${new Date(ui.view.updated).toLocaleTimeString('en-GB', { timeZone: 'Europe/London' })}</text>`;
+  g += `<text x="${R - 4}" y="${H - 12}" class="lbl small" text-anchor="end">TD ${esc((p.areas || [p.area]).join(' · '))}</text>`;
 
   const late = p.late.length
     ? p.late.map((t) => `<button class="row" data-train="${esc(t.code)}"><span class="hc b-${band(t)}">${esc(t.code)}</span><span class="what">${esc(t.desc || 'Platform road ' + t.track)}</span><span class="mins c-${band(t)}">${esc(shortLate(t.delay, t.cancelled))}</span></button>`).join('')
     : `<div class="empty">Nothing running late here right now.</div>`;
 
   return `${head}
-    <div class="iecc-wrap"><svg class="iecc" viewBox="0 0 ${SVGW} ${H}" role="img" aria-label="Signal panel for ${esc(p.name)}">${g}</svg></div>
-    <p class="note">Tap a headcode for that train. ${p.lanes && p.lanes.length ? 'The main lines at each edge show trains coming in (arrow towards the station) and just gone (arrow away), nearest the station first. ' : ''}Pinch to zoom in.</p>
+    <p class="turn-hint">Turn your phone sideways for the panel</p>
+    <div class="landbox"><div class="iecc-wrap land" data-aspect="${(W / H).toFixed(4)}"><svg class="iecc" viewBox="0 0 ${W} ${H}" role="img" aria-label="Signal panel for ${esc(p.name)}">${g}</svg></div></div>
+    <p class="note">Tap a headcode for that train. ${edges ? 'Switches between lines come from Network Rail\'s berth data. Trains further out are listed at each edge, nearest first. ' : ''}Pinch to zoom in.</p>
     ${legend()}
     <section class="list"><div class="list-h">Late on this panel</div>${late}</section>`;
 }
@@ -419,6 +405,26 @@ function renderSheet() {
     <button class="close">Close</button>`;
 }
 
+// The panel is landscape. In portrait it's drawn turned on its side, filling the width,
+// so turning the phone shows it the right way up; in landscape it fits the screen height.
+function fitPanel() {
+  const box = $view.querySelector('.landbox'), wrap = box && box.querySelector('.iecc-wrap');
+  if (!wrap) return;
+  const aspect = Number(wrap.dataset.aspect) || 1.8;
+  const portrait = window.innerHeight > window.innerWidth;
+  document.body.classList.toggle('panel-portrait', portrait);
+  if (portrait) {
+    const w = box.clientWidth;
+    const long = w * aspect;
+    box.style.height = long + 'px';
+    Object.assign(wrap.style, { position: 'absolute', top: '0', left: '0', width: long + 'px', margin: '0', transformOrigin: 'top left', transform: `translateX(${w}px) rotate(90deg)` });
+  } else {
+    box.style.height = '';
+    Object.assign(wrap.style, { position: '', top: '', left: '', width: '', margin: '', transformOrigin: '', transform: '' });
+  }
+}
+window.addEventListener('resize', () => { if (ui.tab === 'panel') fitPanel(); });
+
 // ---------- render & events ----------
 function render() {
   const light = ui.tab === 'route';
@@ -437,6 +443,7 @@ function render() {
     return;
   }
   $view.innerHTML = ui.tab === 'panel' ? renderPanel() : renderRoute();
+  if (ui.tab === 'panel') fitPanel();
   if (ui.selected) renderSheet();
 }
 

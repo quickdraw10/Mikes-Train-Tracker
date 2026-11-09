@@ -8,8 +8,8 @@
 // (left of the panel) and leave to the north (right). "Up" is the reverse.
 //
 // Columns on each road, left to right:
-//   1-2 south approach · 3-4 platform · 5-6 north approach. Main lines beyond each end
-//   are separate tracks ('lanes') drawn at the edges of the panel.
+//   0-4 south approaches · 5-6 platform · 7-11 north approaches, with the switches between
+//   roads drawn from the stepping table. Trains further out are listed at each edge.
 
 import zlib from 'node:zlib';
 
@@ -59,6 +59,7 @@ export function buildStationPanel(smart, cfg) {
   const P = (p) => { if (!plats.has(p)) plats.set(p, { plat: new Set(), south: new Set(), north: new Set() }); return plats.get(p); };
   const inbound = new Set(), outbound = new Set(); // approach berths trains arrive from / depart to
   const sides = new Map(); // approach berth -> 0 south (left) / 1 north (right), from SMART's event codes
+  const ends = new Map();  // platform berth -> Set of ends (0 south, 1 north) it is reached from
   for (const r of here) {
     const p = (r.PLATFORM || '').trim();
     if (!p) continue;
@@ -66,10 +67,10 @@ export function buildStationPanel(smart, cfg) {
     const from = (r.FROMBERTH || '').trim(), to = (r.TOBERTH || '').trim();
     const x = P(p);
     if (ev === 'A' || ev === 'C') {          // arriving: "to" is the platform
-      if (okBerth(to)) x.plat.add(key(r, to));
+      if (okBerth(to)) { x.plat.add(key(r, to)); (ends.get(key(r, to)) || ends.set(key(r, to), new Set()).get(key(r, to))).add(ev === 'C' ? 0 : 1); }
       if (okBerth(from)) { (ev === 'C' ? x.south : x.north).add(key(r, from)); inbound.add(key(r, from)); sides.set(key(r, from), ev === 'C' ? 0 : 1); }
     } else if (ev === 'B' || ev === 'D') {   // departing: "from" is the platform
-      if (okBerth(from)) x.plat.add(key(r, from));
+      if (okBerth(from)) { x.plat.add(key(r, from)); (ends.get(key(r, from)) || ends.set(key(r, from), new Set()).get(key(r, from))).add(ev === 'B' ? 0 : 1); }
       if (okBerth(to)) { (ev === 'B' ? x.south : x.north).add(key(r, to)); outbound.add(key(r, to)); sides.set(key(r, to), ev === 'B' ? 0 : 1); }
     }
   }
@@ -78,80 +79,89 @@ export function buildStationPanel(smart, cfg) {
   const platformBerths = new Set([...plats.values()].flatMap((x) => [...x.plat]));
   for (const x of plats.values()) for (const side of ['south', 'north']) for (const b of x[side]) if (platformBerths.has(b)) x[side].delete(b);
 
-  // The stepping table: which berth a train steps into from which (directed)
-  const next = new Map(), prev = new Map();
-  const add = (m, a, b) => (m.get(a) || m.set(a, new Set()).get(a)).add(b);
+  // The stepping table (which berth a train can step into from which), both ways
+  const nb = new Map();
+  const add = (a, b) => (nb.get(a) || nb.set(a, new Set()).get(a)).add(b);
   for (const r of all) {
     const f = (r.FROMBERTH || '').trim(), t = (r.TOBERTH || '').trim();
-    if (okBerth(f) && okBerth(t)) { add(next, key(r, f), key(r, t)); add(prev, key(r, t), key(r, f)); }
+    if (okBerth(f) && okBerth(t)) { add(key(r, f), key(r, t)); add(key(r, t), key(r, f)); }
   }
 
-  // An approach berth used by several platforms is part of a main line, not one road,
-  // so it goes on a main-line track at the edge of the panel and a train is never drawn twice.
-  const uses = new Map();
-  for (const x of plats.values()) for (const side of ['south', 'north']) for (const b of x[side]) uses.set(b, (uses.get(b) || 0) + 1);
-  for (const x of plats.values()) for (const side of ['south', 'north']) for (const b of [...x[side]]) if (uses.get(b) > 1) x[side].delete(b);
-
-  // Each road: approach berths left (south) and right (north), platform berths in the middle.
-  // A slot can stand for several berths, so a train in any of them shows.
-  const tracks = [...plats.keys()].sort(platOrder).map((p) => {
-    const x = plats.get(p);
-    const berths = [];
-    const slot = (keys, col, kind) => {
-      if (!keys.length) return;
-      const [a, id] = keys[0].split(':');
-      const b = { id, col, kind };
-      if (a !== area) b.area = a;
-      if (keys.length > 1) b.keys = keys;
-      berths.push(b);
-    };
-    const south = [...x.south].sort().reverse(), north = [...x.north].sort(), plat = [...x.plat].sort();
-    if (south.length) { slot([south[0]], 2, 'line'); slot(south.slice(1), 1, 'line'); }
-    if (plat.length <= 1) slot(plat, 3, 'platform'); else { const h = Math.ceil(plat.length / 2); slot(plat.slice(0, h), 3, 'platform'); slot(plat.slice(h), 4, 'platform'); }
-    if (north.length) { slot([north[0]], 5, 'line'); slot(north.slice(1), 6, 'line'); }
-    return { name: p, berths };
-  }).filter((t) => t.berths.some((b) => b.kind === 'platform'));
-
-  // Main-line tracks either side, from the stepping table. A track starts at a berth that
-  // steps straight onto the panel (inbound) or straight off it (outbound), and runs out
-  // from there along the steps. Which side, and which direction, come from SMART too.
-  const onPanel = new Map(); // berth key -> road index
-  tracks.forEach((t, i) => { for (const b of t.berths) for (const k of b.keys || [`${b.area || area}:${b.id}`]) onPanel.set(k, i); });
-  const sideOf = (k) => sides.has(k) ? sides.get(k) : null;
-  const lanes = [];
-  const laneOf = {}; // berth key -> [lane index, steps from the station]
-  const MAX = 8;
-  for (const dir of ['in', 'out']) {
-    const toward = dir === 'in' ? next : prev, away = dir === 'in' ? prev : next;
-    // roots: off-panel berths that step directly onto (or off) the panel
-    const roots = new Map(); // root -> { feeds:Set(road), side }
-    for (const [k, i] of onPanel) for (const r of away.get(k) || []) {
-      if (onPanel.has(r)) continue;
-      const col = tracks[i].berths.find((b) => (b.keys || [`${b.area || area}:${b.id}`]).includes(k)).col;
-      // the side comes from SMART for approach berths, else from where it joins the road
-      const side = sideOf(r) ?? (col <= 2 ? 0 : col >= 5 ? 1 : null);
-      if (side === null) continue; // can't tell which end: leave it off rather than guess
-      const e = roots.get(r) || roots.set(r, { feeds: new Set(), side }).get(r);
-      e.feeds.add(i);
+  // Roads, one per platform, in platform order. Columns, left (south) to right (north):
+  //   0-4 south approaches (4 = next to the platform) · 5-6 platform · 7-11 north approaches
+  const DEPTH = 5, BEYOND = 12;
+  const roads = [...plats.keys()].sort(platOrder).filter((p) => plats.get(p).plat.size);
+  const roadOf = new Map(); // platform berth -> road index
+  roads.forEach((p, i) => { for (const b of plats.get(p).plat) roadOf.set(b, i); });
+  const cells = new Map(); // "road:col" -> { road, col, kind, keys: [] }
+  const put = (road, col, kind, k) => { const id = road + ':' + col; const c = cells.get(id) || cells.set(id, { road, col, kind, keys: [] }).get(id); if (!c.keys.includes(k)) c.keys.push(k); return c; };
+  const at = new Map(); // berth key -> cell
+  roads.forEach((p, i) => {
+    const pl = [...plats.get(p).plat].sort();
+    for (const b of pl) {
+      const e = ends.get(b) || new Set();
+      const col = pl.length === 1 ? 5 : e.has(0) && !e.has(1) ? 5 : e.has(1) && !e.has(0) ? 6 : (pl.indexOf(b) < pl.length / 2 ? 5 : 6);
+      at.set(b, put(i, col, 'platform', b));
     }
-    // a root that steps into another root is part of that root's track
-    for (const r of [...roots.keys()]) for (const n of toward.get(r) || []) if (roots.has(n) && n !== r) { for (const f of roots.get(r).feeds) roots.get(n).feeds.add(f); roots.delete(r); break; }
-    for (const [r, info] of roots) {
-      if (laneOf[r]) continue; // already on a track the other way: bidirectional, keep the first
-      const li = lanes.push({ side: info.side, dir, feeds: [...info.feeds].sort((a, b) => a - b) }) - 1;
-      laneOf[r] = [li, 1];
-      let frontier = [r];
-      for (let d = 2; d <= MAX && frontier.length; d++) {
-        const nf = [];
-        for (const b of frontier) for (const n of away.get(b) || []) if (!onPanel.has(n) && !laneOf[n]) { laneOf[n] = [li, d]; nf.push(n); }
-        frontier = nf;
+  });
+
+  // Approaches, found by stepping out from the platforms. Each berth is drawn once, on the
+  // road in the middle of the roads it leads to, so a train is never drawn twice; where
+  // a berth leads to several roads the connections are drawn as switches (crossovers).
+  const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s[Math.floor((s.length - 1) / 2)]; };
+  const depthOf = new Map(); // berth -> { side, d }
+  let frontier = [];
+  for (const b of roadOf.keys()) for (const n of nb.get(b) || []) {
+    if (roadOf.has(n) || depthOf.has(n) || !sides.has(n)) continue; // side must come from SMART
+    depthOf.set(n, { side: sides.get(n), d: 1 });
+    frontier.push(n);
+  }
+  const roadsTouched = (k) => [...(nb.get(k) || [])].map((n) => roadOf.get(n) ?? (at.get(n) && depthOf.get(n) && depthOf.get(n).d < depthOf.get(k).d ? at.get(n).road : null)).filter((x) => x != null);
+  const beyond = {}; // berth key -> [cell id, steps beyond the drawn approach]
+  for (let d = 1; d <= BEYOND && frontier.length; d++) {
+    const next = [];
+    for (const k of frontier) {
+      const { side } = depthOf.get(k);
+      if (d <= DEPTH) {
+        const rs = roadsTouched(k);
+        if (!rs.length) continue;
+        const col = side === 0 ? DEPTH - d : 6 + d;
+        at.set(k, put(median(rs), col, 'line', k));
+      } else {
+        // further out than we draw: counted against the outermost drawn berth it leads to
+        const parent = [...(nb.get(k) || [])].find((n) => at.has(n) && depthOf.get(n) && depthOf.get(n).d === DEPTH) || [...(nb.get(k) || [])].find((n) => beyond[n]);
+        if (!parent) continue;
+        const pid = at.has(parent) ? at.get(parent).road + ':' + at.get(parent).col : beyond[parent][0];
+        beyond[k] = [pid, at.has(parent) ? 1 : beyond[parent][1] + 1];
       }
+      for (const n of nb.get(k) || []) if (!roadOf.has(n) && !depthOf.has(n)) { depthOf.set(n, { side, d: d + 1 }); next.push(n); }
     }
+    frontier = next;
   }
+
+  // Switches: every step between berths drawn on different roads in neighbouring columns
+  const links = new Set();
+  for (const [k, c] of at) for (const n of nb.get(k) || []) {
+    const c2 = at.get(n);
+    if (!c2 || c2 === c || c2.road === c.road || Math.abs(c2.col - c.col) !== 1) continue;
+    const [a, b] = c.col < c2.col ? [c, c2] : [c2, c];
+    links.add(`${a.road}:${a.col}>${b.road}:${b.col}`);
+  }
+
+  const tracks = roads.map((p, i) => ({
+    name: p,
+    berths: [...cells.values()].filter((c) => c.road === i).sort((a, b) => a.col - b.col).map((c) => {
+      const [a, id] = c.keys[0].split(':');
+      const b = { id, col: c.col, kind: c.kind };
+      if (a !== area) b.area = a;
+      if (c.keys.length > 1) b.keys = c.keys;
+      return b;
+    })
+  }));
 
   return {
-    id: cfg.id, name: cfg.name, subtitle: areas.length ? `TD area${areas.length > 1 ? 's' : ''} ${areas.join(' · ')}` : cfg.subtitle, area, areas, ends: cfg.ends, crs: cfg.crs || null, style: 'iecc', tracks, lanes, laneOf,
-    source: { smartRows: all.length, stationRows: here.length, platforms: tracks.length, areas: count, lanes: lanes.length, laneBerths: Object.keys(laneOf).length }
+    id: cfg.id, name: cfg.name, subtitle: areas.length ? `TD area${areas.length > 1 ? 's' : ''} ${areas.join(' · ')}` : cfg.subtitle, area, areas, ends: cfg.ends, crs: cfg.crs || null, style: 'iecc', cols: 12, tracks, links: [...links], beyond,
+    source: { smartRows: all.length, stationRows: here.length, platforms: tracks.length, areas: count, drawnBerths: at.size, switches: links.size, beyondBerths: Object.keys(beyond).length }
   };
 }
 

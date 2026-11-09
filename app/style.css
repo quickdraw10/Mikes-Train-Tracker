@@ -381,3 +381,20 @@ button.summary { width: calc(100% - 40px); border: 0; font: inherit; text-align:
 .sel-what small { display: block; font-size: 11px; color: var(--text2); }
 .sel-clear { flex: none; height: 34px; padding: 0 12px; border: 0; border-radius: 17px; background: var(--navy); color: #FFFFFF; font: 600 13px var(--body); box-shadow: inset 0 0 0 1.5px var(--trim); cursor: pointer; }
 .tchip.sel { box-shadow: 0 0 0 2.5px #E3B53A, 0 0 14px rgba(227,181,58,0.6), 0 3px 10px rgba(0,0,0,0.5); }
+
+/* Panel: drawn landscape; on its side in portrait so turning the phone shows it upright */
+.landbox { position: relative; margin: 0 12px; }
+.landbox .iecc-wrap { margin: 0; }
+.turn-hint { display: none; margin: 0 20px 8px; font-size: 13px; color: var(--text2); }
+.turn-hint::before { content: "⟳ "; color: var(--trim); }
+body.panel-portrait .turn-hint { display: block; }
+.iecc .tk.sw { stroke-width: 2; }
+@media (orientation: landscape) and (max-height: 520px) {
+  /* landscape phone: just the panel picker and the panel, filling the screen */
+  body[data-tab="panel"] .brand, body[data-tab="panel"] #view > .head { display: none; }
+  body[data-tab="panel"] main#view { padding-top: 4px; max-width: none; }
+  body[data-tab="panel"] .pchips { padding: 2px max(12px, env(safe-area-inset-left)) 6px; }
+  body[data-tab="panel"] .pchip { height: 30px; font-size: 13px; }
+  body[data-tab="panel"] .landbox { margin: 0 max(8px, env(safe-area-inset-left)); }
+  body[data-tab="panel"] .landbox svg { max-height: calc(100vh - var(--tabs-h) - 52px); }
+}
