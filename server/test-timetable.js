@@ -6,6 +6,7 @@ import { buildStationPanel } from './panelbuild.js';
 import { findService, serviceToLive, staffTime } from './staff.js';
 import { normaliseStaff } from './ldb.js';
 import { mergeLive } from './national.js';
+import { buildView } from '../app/model.js';
 
 let passed = 0;
 const test = (name, fn) => { fn(); passed++; console.log('  ✓', name); };
@@ -103,6 +104,29 @@ test('York panel: one road per platform, approach berths on the correct side', (
   assert.ok(road5['0500'].col <= 2 && road5['0501'].col <= 2, 'south approaches on the left');
   assert.ok(road5['0520'].col >= 5 && road5['0530'].col >= 5, 'north approaches on the right');
   assert.equal(road5['0490'].col, 0, 'outer berth found from the stepping table');
+});
+
+test('panel by STANOX: platforms split across two TD areas, berth numbers kept apart', () => {
+  const R = (td, from, to, ev, plat, stanox = '87219') => ({ TD: td, FROMBERTH: from, TOBERTH: to, EVENT: ev, PLATFORM: plat, STANOX: stanox, STANME: 'CLPHMJN', STEPTYPE: 'B' });
+  const smart = { BERTHDATA: [
+    R('VC', '0100', '0110', 'C', '12'), R('VC', '0110', '0120', 'D', '12'), R('VC', '0130', '0111', 'A', '13'),
+    R('WI', '0100', '0110', 'C', '3'), R('WI', '0110', '0120', 'D', '3'),
+    R('WI', '0500', '0510', 'C', '1', '99999')                      // another station
+  ] };
+  const p = buildStationPanel(smart, { id: 'clj', name: 'Clapham Junction', stanox: ['87219'], ends: ['A', 'B'] });
+  assert.deepEqual(p.areas, ['VC', 'WI']);
+  assert.equal(p.area, 'VC');
+  assert.deepEqual(p.tracks.map((t) => t.name), ['3', '12', '13']);
+  const road3 = p.tracks[0].berths.find((b) => b.kind === 'platform');
+  assert.equal(road3.id, '0110');
+  assert.equal(road3.area, 'WI', 'a berth from the second area says which area it is in');
+  assert.equal(p.tracks[1].berths.find((b) => b.kind === 'platform').area, undefined);
+  // the panel reads each berth from its own area
+  const raw = { berths: { 'WI:0110': '2C45', 'VC:0110': '1D22' }, trains: {}, sections: {}, mode: 'live', areaSeen: { WI: Date.now() } };
+  const v = buildView(raw, Date.now(), [p]).panels[0];
+  assert.equal(v.tracks[0].berths.find((b) => b.id === '0110').code, '2C45');
+  assert.equal(v.tracks[1].berths.find((b) => b.id === '0110').code, '1D22');
+  assert.equal(v.quietMins, 0, 'heard from one of its areas');
 });
 
 test('live National Rail stops replace the timetable ahead, including cancelled stops and passing points', () => {

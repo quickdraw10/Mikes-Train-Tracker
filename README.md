@@ -6,18 +6,23 @@ Live UK train positions and delays, drawn from Network Rail's signalling data, i
   coloured by delay; zoom in and they become headcode chips and stations appear. Search any station,
   tap the gold arrow to jump to where you are, tap a station for its departures and arrivals, and
   "Watch this area" to keep a chip for it (e.g. Nottingham) that opens a live log of every train
-  movement within 15 km.
+  movement within 15 km. Tap the Live pill for a list of the trains in view (most late first, 50 at most).
+- **Network (design B)** – a wall map of 17 main lines (`app/network.js`). Each stretch between principal
+  stations is lit by the average delay of the trains on it; tap a stretch for its trains.
 - **Boards** – departures and arrivals for any station: search, "Find stations near me", or saved stations.
-- **Panel (design A)** – York station (TD area Y1) drawn like a signaller's IECC screen: one road per
+- **Panel (design A)** – York, Clapham Junction and Crewe, each drawn like a signaller's IECC screen: one road per
   platform with its approach berths at each end, headcodes in boxes coloured by delay, occupied track lit
-  white and live signal heads. The layout is built on start-up from Network Rail's SMART berth data
-  (`server/panelbuild.js`); signals are learnt from the S-Class feed as trains pass
-  (`server/decode.js`) and fill in over the first hour or so. Check what SMART gave at `/api/panel-debug`.
+  white and live signal heads. Each layout is built on start-up from Network Rail's SMART berth data
+  (`server/panelbuild.js`), finding the station's TD area(s) by its STANOX code; add more in
+  `STATION_PANELS` in `app/layout.js`; signals are learnt from the S-Class feed as trains pass
+  (`server/decode.js`) and fill in over the first hour or so. Check what SMART gave at `/api/panel-debug` (and `?id=clj` etc.).
 - **Train screen** – tap any train for where it came from, where it's going, its next stop with expected
   time and platform, and every stop with booked and actual times. The service downloads Network Rail's
   daily timetable (`server/timetable.js`) and matches each live train to it.
-- **Route (design C)** – a line of stations with Down and Up tracks. Each section is coloured
-  by the delay of the train in it, or the last train through it in the past 20 minutes.
+- **Route (design C)** – any route you choose (`app/route.js`): a main line, one you build station by
+  station, or a train's stops ("Make this my route"). Trains near the line are placed on it in both
+  directions; each section is coloured by the worst delay in it, or the last train through it in the
+  past 20 minutes. Saved on the phone.
 
 Delay colours everywhere: **blue** on time · **orange** 2–9 min late · **red** 10+ min late or cancelled.
 Gold is only for trims.

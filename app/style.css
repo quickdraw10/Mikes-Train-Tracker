@@ -120,7 +120,7 @@ body[data-theme="light"] .pill.demo { color: #7A5A00; }
 :root { --brand-h: calc(env(safe-area-inset-top, 0px) + 56px); }
 .page { max-width: 560px; margin: 0 auto; padding: 10px 0 calc(var(--tabs-h) + 16px); }
 .page[hidden], .mapview[hidden] { display: none; }
-.tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.tabs { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .pad { margin-left: 20px; margin-right: 20px; }
 .back { align-self: flex-start; min-height: 44px; padding: 0; border: 0; background: none; color: var(--trim); font-weight: 600; font-size: 15px; cursor: pointer; }
 
@@ -319,3 +319,22 @@ button.sname { border: 0; padding: 0; background: none; color: var(--text); text
 .rb-stop button { width: 36px; height: 36px; border: 0; border-radius: 18px; background: transparent; color: var(--text2); cursor: pointer; }
 .rb-search { margin-bottom: 4px; }
 .results.inline { position: static; margin-top: 6px; box-shadow: inset 0 0 0 1px var(--line); max-height: none; }
+
+/* Panel picker */
+.pchips { display: flex; gap: 8px; padding: 2px 20px 14px; overflow-x: auto; scrollbar-width: none; }
+.pchips::-webkit-scrollbar { display: none; }
+.pchip { flex: none; height: 36px; padding: 0 14px; border: 0; border-radius: 18px; background: var(--card); color: var(--text2); font: 600 14px var(--body); box-shadow: inset 0 0 0 1px var(--line); cursor: pointer; }
+.pchip[aria-selected="true"] { background: var(--navy); color: #FFFFFF; box-shadow: inset 0 0 0 1.5px var(--trim); }
+
+/* Network wall map (design B) */
+.nw .nw-seg { stroke-width: 3.2; stroke-linecap: round; fill: none; stroke: #59606B; }
+.nw .nw-seg.b-ok { stroke: #8FB0F0; }
+.nw .nw-seg.b-mid { stroke: #F59E42; }
+.nw .nw-seg.b-bad { stroke: #F2555A; }
+.nw .nw-glow { stroke-width: 9; stroke-linecap: round; stroke: transparent; }
+.nw .nw-glow.b-mid { stroke: rgba(245,158,66,0.22); }
+.nw .nw-glow.b-bad { stroke: rgba(242,85,90,0.28); }
+.nw .nw-hit { stroke: transparent; stroke-width: 16; stroke-linecap: round; cursor: pointer; }
+.nw .nw-stn { fill: #030406; stroke: #F2F4F7; stroke-width: 1; pointer-events: none; }
+.nw .nw-stn.big { fill: #030406; stroke: #E3B53A; stroke-width: 1.6; pointer-events: auto; cursor: pointer; }
+.nw .nw-lbl { fill: #B98CFF; font: 700 7.5px var(--mono); letter-spacing: 0.06em; cursor: pointer; }

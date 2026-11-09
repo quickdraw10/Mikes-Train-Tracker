@@ -11,12 +11,15 @@ import { showMap, trainSheet, stationSheet } from './mapview.js';
 import * as route from './route.js';
 import { BY_CRS, searchStations } from './geo.js';
 import { showBoards } from './boards.js';
+import { showNetwork } from './network.js';
 
 const $view = document.getElementById('view');
 const $sheet = document.getElementById('sheet');
 const $sheetCard = $sheet.querySelector('.sheet-card');
 
-const ui = { tab: 'panel', panel: 0, route: 0, selected: null, view: null, source: 'wait' };
+let savedPanel = 0;
+try { savedPanel = Number(localStorage.getItem('mtt.panel')) || 0; } catch { /* default */ }
+const ui = { tab: 'panel', panel: savedPanel, route: 0, selected: null, view: null, source: 'wait' };
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const clock = (t) => new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -70,15 +73,20 @@ function findTrain(code) {
 const SVGW = 400, COLW = 41, X0 = 56, ROWH = 32, TOP = 56;
 const colX = (c) => X0 + c * COLW;
 
+function panelChips() {
+  return `<div class="pchips" role="tablist" aria-label="Choose a signal panel">${ui.view.panels.map((x, i) => `<button role="tab" class="pchip" data-panel="${i}" aria-selected="${i === ui.panel}">${esc(x.name)}</button>`).join('')}</div>`;
+}
+
 function renderPanel() {
+  if (ui.panel >= ui.view.panels.length) ui.panel = 0;
   const p = ui.view.panels[ui.panel];
   if (!p) return '';
   const quiet = p.quietMins === null
     ? `<div class="sub"><span class="pill wait">Waiting for area ${esc(p.area)}</span></div>`
     : p.quietMins >= 5 ? `<div class="sub"><span class="pill wait c-bad">No signalling messages from ${esc(p.area)} for ${p.quietMins} min</span></div>` : '';
-  const head = `<header class="head"><h1>${esc(p.name)}</h1><div class="sub">${esc(p.subtitle)}</div><div class="sub">${statusLine(ui.view)}</div>${quiet}</header>`;
+  const head = panelChips() + `<header class="head"><h1>${esc(p.name)}</h1><div class="sub">${esc(p.subtitle)}</div><div class="sub">${statusLine(ui.view)}</div>${quiet}</header>`;
   if (!p.tracks.length) {
-    return head + `<div class="iecc-wrap"><div class="iecc-empty">${esc(p.note || 'Building the York layout from Network Rail\'s berth data…')}</div></div>`;
+    return head + `<div class="iecc-wrap"><div class="iecc-empty">${esc(p.note || 'Building the layout from Network Rail\'s berth data…')}</div></div>`;
   }
 
   const n = p.tracks.length;
@@ -286,7 +294,7 @@ function routeBuilder(startCrs) {
   if (!startCrs) setTimeout(() => q.focus(), 50);
 }
 
-window.addEventListener('mtt:route', (e) => { useRoute(e.detail.route); toast(`Route set from ${e.detail.train}'s stops`); });
+window.addEventListener('mtt:route', (e) => { useRoute(e.detail.route); toast(e.detail.quiet ? `${e.detail.route.name} is now on the Route tab` : `Route set from ${e.detail.train}'s stops`); });
 window.addEventListener('mtt:build', (e) => { switchTab('route'); routeBuilder(e.detail.crs); });
 
 // ---------- train sheet ----------
@@ -321,6 +329,7 @@ function render() {
   document.querySelector('meta[name="theme-color"]').content = light ? '#FFFFFF' : '#0B0D12';
   document.getElementById('mapview').hidden = ui.tab !== 'map';
   document.getElementById('boardsview').hidden = ui.tab !== 'boards';
+  document.getElementById('netview').hidden = ui.tab !== 'network';
   document.getElementById('infoview').hidden = ui.tab !== 'info';
   $view.hidden = ui.tab !== 'panel' && ui.tab !== 'route';
   if ($view.hidden) return;
@@ -338,6 +347,7 @@ function switchTab(tab) {
   if (tab === 'map') showMap();
   if (tab === 'boards') showBoards();
   if (tab === 'route') startRoute();
+  if (tab === 'network') showNetwork(document.getElementById('netview'), { train: trainSheet, station: (crs) => stationSheet(crs) });
 }
 
 document.getElementById('info-btn').addEventListener('click', () => switchTab('info'));
@@ -348,6 +358,8 @@ document.querySelector('.tabs').addEventListener('click', (e) => {
   if (btn) switchTab(btn.dataset.tab);
 });
 $view.addEventListener('click', (e) => {
+  const pc = e.target.closest('[data-panel]');
+  if (pc) { ui.panel = Number(pc.dataset.panel); try { localStorage.setItem('mtt.panel', String(ui.panel)); } catch { /* not saved */ } render(); return; }
   const rt = e.target.closest('[data-rtrain]');
   if (rt) { const t = routeData && routeData.trains.find((x) => x.id === rt.dataset.rtrain); if (t) trainSheet(t); return; }
   const ra = e.target.closest('[data-act-route]');

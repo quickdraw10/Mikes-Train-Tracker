@@ -104,7 +104,7 @@ export function positionOf(t, now = Date.now()) {
   return { lat: t.at.lat + (t.next.lat - t.at.lat) * f, lon: t.at.lon + (t.next.lon - t.at.lon) * f };
 }
 
-export function trainsIn(nat, box, now = Date.now()) {
+export function trainsIn(nat, box, now = Date.now(), max = 600) {
   const out = [];
   for (const t of nat.trains.values()) {
     if (t.terminated && now - t.updated > 10 * 60000) continue;
@@ -114,7 +114,7 @@ export function trainsIn(nat, box, now = Date.now()) {
   }
   // When zoomed far out, show the most delayed trains first
   out.sort((a, b) => (b.delay ?? 0) - (a.delay ?? 0));
-  return { mode: 'live', total: out.length, trains: out.slice(0, 600) };
+  return { mode: 'live', total: out.length, trains: out.slice(0, max) };
 }
 
 // When the timetable finishes loading, link the trains already being tracked

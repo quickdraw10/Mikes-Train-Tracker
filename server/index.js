@@ -13,7 +13,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { YORK } from '../app/layout.js';
+import { YORK, STATION_PANELS } from '../app/layout.js';
 import { emptyState, buildView } from '../app/model.js';
 import { createSim } from '../app/sim.js';
 import { handleTd } from './td.js';
@@ -54,36 +54,53 @@ if (live) {
   const tt = createTimetable();
   const nat = createNational(tt);
 
-  // ---- York panel: layout from SMART, signals learnt from the feed ----
+  // ---- signal panels (York, Clapham Junction, Crewe): layouts from SMART, signals learnt from the feed ----
+  const crsStanox = {};
+  for (const [sx, crs] of Object.entries(stanoxCrs)) (crsStanox[crs] ||= []).push(sx);
   const areas = new Set([YORK.area]);
-  livePanels = [{ ...YORK, style: 'iecc', tracks: [], note: 'Building the York layout from Network Rail\'s berth data…' }];
+  raw.signalMap = {};
+  const sigFile = (a) => path.join(here, 'data', `signals-${a}.json`);
+  const addArea = (a) => {
+    if (!a || raw.signalMap[a]) return;
+    areas.add(a);
+    raw.signalMap[a] = {};
+    try { if (fs.existsSync(sigFile(a))) raw.signalMap[a] = JSON.parse(fs.readFileSync(sigFile(a), 'utf8')).signals || {}; } catch { /* start fresh */ }
+  };
+  addArea(YORK.area);
+  panelDebug = {};
+  livePanels = STATION_PANELS.map((cfg) => ({ ...cfg, style: 'iecc', tracks: [], note: `Building the ${cfg.name} layout from Network Rail's berth data…` }));
   const loadPanel = async () => {
     try {
       const smart = await downloadSmart(user, pass);
-      const built = buildStationPanel(smart, YORK);
-      panelDebug = { built: built.source, ...smartDebug(smart, YORK) };
-      livePanels = [built.tracks.length ? built : { ...built, note: `No platforms for ${YORK.name} found in SMART area ${YORK.area}.` }];
-      console.log(`[panel] ${YORK.name}: ${built.tracks.length} platform roads from ${built.source.stationRows} SMART rows`);
+      livePanels = STATION_PANELS.map((cfg) => {
+        const c = { ...cfg, stanox: crsStanox[cfg.crs] || null };
+        const built = buildStationPanel(smart, c);
+        panelDebug[cfg.id] = { built: built.source, ...smartDebug(smart, c) };
+        for (const a of built.areas || []) addArea(a);
+        console.log(`[panel] ${cfg.name}: ${built.tracks.length} platform roads, areas ${(built.areas || []).join(',')} from ${built.source.stationRows} SMART rows`);
+        return built.tracks.length ? built : { ...built, note: `No platforms for ${cfg.name} found in Network Rail's berth data.` };
+      });
       schedulePush();
     } catch (e) {
       console.log('[panel] SMART failed:', e.message, '— retrying in 15 min');
-      livePanels[0].note = 'Could not download the berth data yet. Retrying shortly.';
+      for (const p of livePanels) p.note = 'Could not download the berth data yet. Retrying shortly.';
       setTimeout(loadPanel, 15 * 60000);
     }
   };
   loadPanel();
 
-  raw.signalMap = {};
-  const sigFile = path.join(here, 'data', `signals-${YORK.area}.json`);
-  if (fs.existsSync(sigFile)) raw.signalMap[YORK.area] = JSON.parse(fs.readFileSync(sigFile, 'utf8')).signals || {};
   const decoder = createDecoder();
   setInterval(() => {
-    const found = (decoder.results().signals || {})[YORK.area] || {};
-    if (!Object.keys(found).length) return;
-    raw.signalMap[YORK.area] = { ...(raw.signalMap[YORK.area] || {}), ...found };
-    stats.signalsMapped = Object.keys(raw.signalMap[YORK.area]).length;
-    try { fs.mkdirSync(path.dirname(sigFile), { recursive: true }); fs.writeFileSync(sigFile, JSON.stringify({ area: YORK.area, updated: new Date().toISOString(), signals: raw.signalMap[YORK.area] })); } catch { /* disk is optional */ }
-    schedulePush();
+    const found = decoder.results().signals || {};
+    let any = false;
+    for (const [a, sigs] of Object.entries(found)) {
+      if (!areas.has(a) || !Object.keys(sigs).length) continue;
+      raw.signalMap[a] = { ...(raw.signalMap[a] || {}), ...sigs };
+      any = true;
+      try { fs.mkdirSync(path.dirname(sigFile(a)), { recursive: true }); fs.writeFileSync(sigFile(a), JSON.stringify({ area: a, updated: new Date().toISOString(), signals: raw.signalMap[a] })); } catch { /* disk is optional */ }
+    }
+    stats.signalsMapped = Object.fromEntries(Object.entries(raw.signalMap).map(([a, m]) => [a, Object.keys(m).length]));
+    if (any) schedulePush();
   }, 5 * 60000);
 
   // ---- timetable: load now, then each morning after the new file is out (~06:00) ----
@@ -117,7 +134,7 @@ if (live) {
   });
   setInterval(() => { prune(raw); pruneNational(nat); }, 10 * 60 * 1000);
   national = {
-    trains: (box) => trainsIn(nat, box),
+    trains: (box, max) => trainsIn(nat, box, Date.now(), max),
     moves: (lat, lon, r) => movesNear(nat, lat, lon, r),
     board: (crs, type) => getBoard(crs, type),
     train: (id) => liveDetailOf(nat, id)
@@ -172,7 +189,8 @@ const server = http.createServer((req, res) => {
   if (url.pathname === '/api/trains') {
     const box = { w: num('w'), s: num('s'), e: num('e'), n: num('n') };
     if (![box.w, box.s, box.e, box.n].every(Number.isFinite)) return json(400, { error: 'Need w, s, e, n' });
-    return json(200, national.trains(box));
+    const max = Math.max(1, Math.min(2500, num('max') || 600));
+    return json(200, national.trains(box, max));
   }
   if (url.pathname === '/api/moves') {
     const lat = num('lat'), lon = num('lon'), r = Math.min(50, num('km') || 15);
@@ -191,7 +209,12 @@ const server = http.createServer((req, res) => {
       .catch((e) => json(500, { error: e.message }));
     return;
   }
-  if (url.pathname === '/api/panel-debug') return json(200, panelDebug || { note: live ? 'Still loading SMART' : 'Demo mode' });
+  if (url.pathname === '/api/panel-debug') {
+    if (!panelDebug) return json(200, { note: 'Demo mode' });
+    const id = url.searchParams.get('id');
+    if (id) return json(200, panelDebug[id] || { note: 'Still loading SMART, or no such panel. Panels: ' + STATION_PANELS.map((p) => p.id).join(', ') });
+    return json(200, Object.fromEntries(Object.entries(panelDebug).map(([k, v]) => [k, { areas: v.areas, stationRows: v.stationRows, built: v.built, more: `/api/panel-debug?id=${k}` }])));
+  }
   const bm = /^\/api\/board\/([A-Za-z]{3})$/.exec(url.pathname);
   if (bm) {
     const type = url.searchParams.get('type') === 'arr' ? 'arr' : 'dep';

@@ -48,18 +48,21 @@ export function buildView(raw, now = Date.now(), panelDefs = PANELS) {
       dir: t.dir,
       berths: t.berths.map((bd, i) => {
         const id = typeof bd === 'string' ? bd : bd.id;
-        const code = raw.berths[p.area + ':' + id] || null;
+        const area = bd.area || p.area;
+        const code = raw.berths[area + ':' + id] || null;
         const tr = code ? raw.trains[code] : null;
-        const b = { id, col: bd.col ?? i, kind: bd.kind || 'line', code, delay: tr ? tr.delay : null, band: code ? band(tr) : 'empty', signal: signalState(raw, p.area, id) };
+        const b = { id, col: bd.col ?? i, kind: bd.kind || 'line', code, delay: tr ? tr.delay : null, band: code ? band(tr) : 'empty', signal: signalState(raw, area, id) };
+        if (bd.area) b.area = bd.area;
         if (code && tr && (tr.cancelled || tr.delay >= 2)) late.push({ code, delay: tr.delay, cancelled: !!tr.cancelled, desc: tr.desc || null, track: t.name });
         return b;
       })
     }));
     late.sort((a, b) => (b.delay || 0) - (a.delay || 0));
-    const heard = raw.areaSeen && raw.areaSeen[p.area];
+    // the most recent message from any of the panel's areas
+    const heard = Math.max(0, ...(p.areas || [p.area]).map((a) => (raw.areaSeen && raw.areaSeen[a]) || 0)) || null;
     // Live only: an area that has sent nothing (not even a heartbeat) for 5 minutes is probably down
     const quietMins = raw.mode === 'live' ? (heard ? Math.floor((now - heard) / 60000) : null) : 0;
-    return { id: p.id, name: p.name, subtitle: p.subtitle, area: p.area, ends: p.ends, style: p.style || null, note: p.note || null, tracks, late, quietMins };
+    return { id: p.id, name: p.name, subtitle: p.subtitle, area: p.area, areas: p.areas || [p.area], ends: p.ends, style: p.style || null, note: p.note || null, tracks, late, quietMins };
   });
 
   const routes = ROUTES.map((r) => {

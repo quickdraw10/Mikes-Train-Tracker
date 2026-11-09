@@ -22,10 +22,10 @@ async function get(path) {
   return body;
 }
 
-export async function trains(box) {
+export async function trains(box, max) {
   const how = await ready;
   if (how === 'demo') return sim.trains(box);
-  return get(`/api/trains?w=${box.w}&s=${box.s}&e=${box.e}&n=${box.n}`);
+  return get(`/api/trains?w=${box.w}&s=${box.s}&e=${box.e}&n=${box.n}${max ? '&max=' + max : ''}`);
 }
 
 export async function board(crs, type) {

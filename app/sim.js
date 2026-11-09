@@ -21,17 +21,17 @@ export function createSim() {
   const raw = emptyState();
   raw.mode = 'demo';
   const used = new Set();
-  function newCode() {
+  function newCode(prefix = PREFIX) {
     let c;
-    do { c = pick(PREFIX) + String(Math.floor(Math.random() * 100)).padStart(2, '0'); } while (used.has(c));
+    do { c = pick(prefix) + String(Math.floor(Math.random() * 100)).padStart(2, '0'); } while (used.has(c));
     used.add(c);
     return c;
   }
-  function newTrain(dir) {
-    const code = newCode();
+  function newTrain(dir, p) {
+    const code = newCode(p && p.prefix);
     const t = train(raw, code);
     t.delay = randomDelay();
-    t.desc = pick(dir === 'down' ? DOWN_DESC : UP_DESC);
+    t.desc = pick(p && p.desc ? p.desc[dir] : dir === 'down' ? DOWN_DESC : UP_DESC);
     t.toc = pick(['LNER', 'TransPennine Express', 'Northern', 'CrossCountry', 'Grand Central']);
     return t;
   }
@@ -66,7 +66,7 @@ export function createSim() {
           raw.berths[p.area + ':' + order[pt.i]] = pt.code;
         }
         if (!list.some((o) => o.i <= 1) && list.length < 3 && Math.random() < 0.3) {
-          const t = newTrain(tr.dir);
+          const t = newTrain(tr.dir, p);
           list.push({ code: t.code, i: 0 });
           raw.berths[p.area + ':' + order[0]] = t.code;
         }
