@@ -21,7 +21,7 @@ import { handleSClass } from './sclass.js';
 import { handleTrust, buildStanoxIndex, prune } from './trust.js';
 import { applyStanox, loadStanoxCrs, downloadCorpus, haveCorpus } from './corpus.js';
 import { createNational, handleNational, trainsIn, movesNear, pruneNational, attachAll, liveDetailOf, linkPanelTrains } from './national.js';
-import { staffBoard } from './staff.js';
+import { staffBoard, loadReasons, reasonsStatus } from './staff.js';
 import { createTimetable, loadTimetable } from './timetable.js';
 import { downloadSmart, buildStationPanel, smartDebug } from './panelbuild.js';
 import { createDecoder } from './decode.js';
@@ -133,6 +133,10 @@ if (live) {
     }
   });
   setInterval(() => { prune(raw); pruneNational(nat); }, 10 * 60 * 1000);
+  // Darwin's reason code list, for the meaning of delay and cancellation codes
+  const reasons = () => loadReasons().then((r) => console.log('[reasons]', r.loaded ? `${r.count} reason codes` : 'not available: ' + JSON.stringify(r.tried)));
+  reasons();
+  setInterval(reasons, 24 * 3600000);
   // match panel headcodes to real trains (by headcode and place) every few seconds
   setInterval(() => { linkPanelTrains(nat, raw, livePanels || []); }, 5000);
   national = {
@@ -211,6 +215,7 @@ const server = http.createServer((req, res) => {
       .catch((e) => json(500, { error: e.message }));
     return;
   }
+  if (url.pathname === '/api/reasons-debug') return json(200, reasonsStatus());
   if (url.pathname === '/api/panel-debug') {
     if (!panelDebug) return json(200, { note: 'Demo mode' });
     const id = url.searchParams.get('id');

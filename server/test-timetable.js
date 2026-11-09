@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createTimetable, ingest, finish, matchByHeadcode, trainDetail, mins } from './timetable.js';
 import { createNational, handleNational, detailOf, attachAll } from './national.js';
 import { buildStationPanel } from './panelbuild.js';
-import { findService, serviceToLive, staffTime } from './staff.js';
+import { findService, serviceToLive, staffTime, textOf, reasonMap } from './staff.js';
 import { normaliseStaff } from './ldb.js';
 import { mergeLive } from './national.js';
 import { buildView } from '../app/model.js';
@@ -163,6 +163,14 @@ test('Staff Version quirks: no estimate means "Delayed", reasons are codes, time
   const b = normaliseStaff({ trainServices: [{ trainid: '1E14', std: '2026-11-09T14:17:00', departureType: 'Delayed', destination: [{ locationName: 'London Kings Cross' }], platform: '9' }] });
   assert.equal(b.services[0].expected, 'Delayed');
   assert.equal(b.services[0].delay, null);
+});
+
+test('reason codes keep the code and add Darwin\'s meaning when the list is loaded', () => {
+  assert.equal(textOf({ value: 999 }), 'Reason code 999', 'no meaning made up');
+  reasonMap.set('999', { late: 'This train has been delayed by a test', canc: 'This train has been cancelled because of a test' });
+  assert.equal(textOf({ value: 999 }), 'This train has been delayed by a test (code 999)');
+  assert.equal(textOf('999', 'canc'), 'This train has been cancelled because of a test (code 999)');
+  reasonMap.delete('999');
 });
 
 console.log(`\n${passed} timetable and panel tests passed`);

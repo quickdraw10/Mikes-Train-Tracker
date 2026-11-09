@@ -93,19 +93,61 @@ export function serviceToLive(svc, boardStation) {
     source: 'darwin',
     rid: svc.rid || null, uid: svc.uid || null, headcode: svc.trainid || svc.trainId || null,
     operator: svc.operator || null, length: Number(svc.length) || null,
-    cancelled: Boolean(svc.isCancelled), cancelReason: textOf(svc.cancelReason), delayReason: textOf(svc.delayReason),
+    cancelled: Boolean(svc.isCancelled), cancelReason: textOf(svc.cancelReason, 'canc'), delayReason: textOf(svc.delayReason, 'late'),
     origin: names(svc.origin), dest: names(svc.destination),
     stops: [here, ...ahead]
   };
 }
 
-// The Staff Version gives reasons as Darwin reason codes (e.g. 871), not text
-export function textOf(r) {
+// The Staff Version gives reasons as Darwin reason codes (e.g. 871), not text.
+// The meanings come from Darwin's own reason code list (GetReasonCodeList), fetched
+// once a day. We never make up a meaning: if the list can't be fetched, the code is
+// shown on its own.
+const REASONS = new Map(); // code -> { late, canc }
+let reasonsInfo = { loaded: false, tried: [] };
+const STAFF_ROOT = BASE.replace(/\/LDBSVWS\/.*$/, '');
+const REF_URLS = () => [
+  process.env.LDB_REF_URL,
+  `${STAFF_ROOT}/LDBSVWS/api/ref/20211101/GetReasonCodeList`,
+  'https://api1.raildata.org.uk/1010-reference-data1_0/LDBSVWS/api/ref/20211101/GetReasonCodeList'
+].filter(Boolean);
+
+export async function loadReasons() {
+  const key = process.env.LDB_REF_KEY || process.env.LDB_STAFF_KEY;
+  if (!key) return reasonsInfo;
+  const tried = [];
+  for (const url of REF_URLS()) {
+    try {
+      const res = await fetch(url, { headers: { 'x-apikey': key }, signal: AbortSignal.timeout(10000) });
+      tried.push({ url, status: res.status });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : data.reasons || data.GetReasonCodeListResult || data.reason || [];
+      for (const r of list) {
+        const code = String(r.code ?? r.Code ?? '').trim();
+        if (code) REASONS.set(code, { late: r.lateReason || r.LateReason || null, canc: r.cancReason || r.CancReason || null });
+      }
+      if (REASONS.size) { reasonsInfo = { loaded: true, count: REASONS.size, url, at: new Date().toISOString(), tried }; return reasonsInfo; }
+    } catch (e) { tried.push({ url, error: e.message }); }
+  }
+  reasonsInfo = { loaded: false, tried };
+  return reasonsInfo;
+}
+export const reasonsStatus = () => reasonsInfo;
+export const reasonMap = REASONS;
+
+// Code plus meaning: "This train has been delayed by … (code 871)", or just the code
+export function textOf(r, kind = 'late') {
   if (r == null || r === '') return null;
   const v = typeof r === 'object' ? (r.value ?? r.Value ?? r.reason ?? r.code ?? null) : r;
   if (v == null || v === '') return null;
-  if (/^\d+$/.test(String(v))) return `Reason code ${v}`;
-  return String(v);
+  const s = String(v).trim();
+  if (/^\d+$/.test(s)) {
+    const m = REASONS.get(s);
+    const text = m && (kind === 'canc' ? m.canc || m.late : m.late || m.canc);
+    return text ? `${text} (code ${s})` : `Reason code ${s}`;
+  }
+  return s;
 }
 
 // Expected time: the estimate if there is one, else Darwin's "Delayed" flag, else the booked time

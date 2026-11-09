@@ -63,7 +63,7 @@ export function normaliseStaff(data) {
       delay: cancelled ? null : expected && /\d/.test(expected) ? delayBetween(booked, expected) : expected === 'On time' ? 0 : null,
       place: names(s.destination) || '—', platform: s.platform || null, platformHidden: Boolean(s.platformIsHidden),
       toc: s.operator || null, passenger: s.isPassengerService !== false,
-      reason: textOf(s.cancelReason) || textOf(s.delayReason) || null,
+      reason: textOf(s.cancelReason, 'canc') || textOf(s.delayReason, 'late') || null,
       length: Number(s.length) || null
     };
   });
