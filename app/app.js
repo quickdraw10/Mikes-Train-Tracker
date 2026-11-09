@@ -228,6 +228,7 @@ function render() {
   document.querySelector('meta[name="theme-color"]').content = light ? '#FFFFFF' : '#0B0D12';
   document.getElementById('mapview').hidden = ui.tab !== 'map';
   document.getElementById('boardsview').hidden = ui.tab !== 'boards';
+  document.getElementById('infoview').hidden = ui.tab !== 'info';
   $view.hidden = ui.tab !== 'panel' && ui.tab !== 'route';
   if ($view.hidden) return;
   if (!ui.view) { $view.innerHTML = `<header class="head"><h1>Train Tracker</h1><div class="sub"><span class="pill wait">Connecting…</span></div></header>`; return; }
@@ -236,6 +237,7 @@ function render() {
 }
 
 function switchTab(tab) {
+  if (tab !== 'info') ui.lastTab = tab;
   ui.tab = tab;
   document.querySelectorAll('.tab').forEach((t) => { if (t.dataset.tab === tab) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current'); });
   window.scrollTo(0, 0);
@@ -243,6 +245,9 @@ function switchTab(tab) {
   if (tab === 'map') showMap();
   if (tab === 'boards') showBoards();
 }
+
+document.getElementById('info-btn').addEventListener('click', () => switchTab('info'));
+document.getElementById('info-back').addEventListener('click', () => switchTab(ui.lastTab || 'map'));
 
 document.querySelector('.tabs').addEventListener('click', (e) => {
   const btn = e.target.closest('.tab');

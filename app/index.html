@@ -21,6 +21,7 @@
   <header class="brand">
     <img src="icon.svg" width="34" height="34" alt="">
     <div class="wordmark"><span class="mikes">Mike's</span><span class="tt">Train Tracker</span></div>
+    <button id="info-btn" class="info-btn" aria-label="About the app and headcodes">i</button>
   </header>
 
   <section id="mapview" class="mapview" aria-label="Map of trains">
@@ -43,6 +44,101 @@
     </div>
   </section>
 
+
+  <section id="infoview" class="page info" hidden aria-labelledby="info-title">
+    <header class="head">
+      <button class="back" id="info-back">‹ Back</button>
+      <h1 id="info-title">Guide</h1>
+      <div class="sub">Reading headcodes, colours and the signal panel</div>
+    </header>
+
+    <div class="icard">
+      <h2>Reading a headcode</h2>
+      <p>Every train on the network carries a four-character headcode. The signaller sees it in the box on the panel, and it tells you what kind of train it is.</p>
+      <div class="hc-anatomy" aria-label="Headcode 1Z23 explained">
+        <div class="hc-part"><span class="hc-big">1</span><small>Class</small><span>What kind of train</span></div>
+        <div class="hc-part"><span class="hc-big">Z</span><small>Letter</small><span>Area or route; some letters mark specials</span></div>
+        <div class="hc-part"><span class="hc-big">23</span><small>Number</small><span>Picks out the individual train</span></div>
+      </div>
+      <p class="fine">The same headcode can be used by different trains in different parts of the country on the same day.</p>
+    </div>
+
+    <div class="icard">
+      <h2>The first digit: train class</h2>
+      <div class="hc-table">
+        <div class="hc-row"><span class="hck">0</span><b>Light locomotive</b><span>A locomotive running on its own, no carriages or wagons</span></div>
+        <div class="hc-row"><span class="hck">1</span><b>Express passenger</b><span>Also used for some priority trains such as test trains and specials</span></div>
+        <div class="hc-row"><span class="hck">2</span><b>Stopping passenger</b><span>Local and all-stations services</span></div>
+        <div class="hc-row"><span class="hck">3</span><b>Priority special</b><span>Autumn railhead treatment trains, some test trains and parcels</span></div>
+        <div class="hc-row"><span class="hck fr">4</span><b>Fast freight</b><span>Freight allowed up to 75 mph, often container trains</span></div>
+        <div class="hc-row"><span class="hck">5</span><b>Empty passenger train</b><span>Going to or from a depot or siding, not carrying passengers</span></div>
+        <div class="hc-row"><span class="hck fr">6</span><b>Freight</b><span>Freight up to 60 mph, and many engineering trains</span></div>
+        <div class="hc-row"><span class="hck fr">7</span><b>Freight</b><span>Freight up to 45 mph</span></div>
+        <div class="hc-row"><span class="hck fr">8</span><b>Slow freight</b><span>Freight up to 35 mph</span></div>
+        <div class="hc-row"><span class="hck">9</span><b>Special class</b><span>Some high-speed and international services, and other special uses</span></div>
+      </div>
+    </div>
+
+    <div class="icard">
+      <h2>Letters worth spotting</h2>
+      <div class="hc-table">
+        <div class="hc-row"><span class="hck gold">1Z</span><b>Charter or special</b><span>Often a railtour, sometimes a steam special</span></div>
+        <div class="hc-row"><span class="hck gold">1Q</span><b>Test train</b><span>Network Rail's measurement trains, including the yellow New Measurement Train</span></div>
+      </div>
+      <p class="fine">Letters are a convention, not a strict rule, and their use varies by region.</p>
+    </div>
+
+    <div class="icard">
+      <h2>Colours in the app</h2>
+      <div class="key">
+        <div><span class="sw b-ok"></span><b>On time</b><span>or up to a minute late</span></div>
+        <div><span class="sw b-mid"></span><b>2–9 minutes late</b><span></span></div>
+        <div><span class="sw b-bad"></span><b>10+ minutes late</b><span>or cancelled</span></div>
+        <div><span class="sw gold-sw"></span><b>Gold</b><span>trims and stations only, never a delay</span></div>
+      </div>
+    </div>
+
+    <div class="icard">
+      <h2>The York signal panel</h2>
+      <p>Drawn like a signaller's IECC screen at York ROC. Each line is a platform road, with the approach sections at each end. Trains step from section to section ("berths") as the signals clear, so they jump rather than glide.</p>
+      <svg class="iecc mini" viewBox="0 0 300 70" role="img" aria-label="Example of the panel symbols">
+        <line x1="10" y1="40" x2="290" y2="40" class="tk"/>
+        <line x1="70" y1="40" x2="130" y2="40" class="i-occglow"/><line x1="70" y1="40" x2="130" y2="40" class="i-occ"/>
+        <g class="hcbox b-mid"><rect x="83" y="32.5" width="34" height="15" rx="1.5"/><text x="100" y="43.6" text-anchor="middle">1S23</text></g>
+        <line x1="128" y1="38" x2="128" y2="32" class="stem"/><circle cx="128" cy="29.5" r="2.8" class="sg on"/>
+        <line x1="200" y1="38" x2="200" y2="32" class="stem"/><circle cx="200" cy="29.5" r="2.8" class="sg off"/>
+        <line x1="250" y1="38" x2="250" y2="32" class="stem"/><circle cx="250" cy="29.5" r="2.8" class="sg unk"/>
+        <rect x="160" y="49" width="70" height="4" class="i-plat"/>
+        <text x="100" y="64" class="lbl small" text-anchor="middle">TRAIN + LIT TRACK</text>
+        <text x="200" y="20" class="lbl small" text-anchor="middle">SIGNAL OFF</text>
+        <text x="128" y="20" class="lbl small" text-anchor="middle">ON</text>
+        <text x="258" y="20" class="lbl small" text-anchor="middle">LEARNING</text>
+        <text x="195" y="64" class="lbl small" text-anchor="middle">PLATFORM</text>
+      </svg>
+      <ul class="dots">
+        <li><b>White track</b> is occupied by the train in that section.</li>
+        <li><b>Red</b> signal: on, at danger. <b>Green</b>: off, showing a proceed aspect (the feed doesn't say which). <b>Hollow</b>: not learnt yet, which fills in over the first hour.</li>
+        <li>The headcode box is coloured by delay. Tap it for the train.</li>
+      </ul>
+    </div>
+
+    <div class="icard">
+      <h2>Not just passenger trains</h2>
+      <p>The map and panel use Network Rail's own signalling and movement data, so they show everything that moves on the network: freight, light engines, empty trains, engineering and test trains, and charters. National Rail's data only covers passenger services. A small number of sensitive movements are never published.</p>
+    </div>
+
+    <div class="icard">
+      <h2>Where the data comes from</h2>
+      <ul class="dots">
+        <li><b>Signalling (TD):</b> which section every train is in, and signal states. Network Rail.</li>
+        <li><b>Train movements (TRUST):</b> times at each timing point and how late. Network Rail.</li>
+        <li><b>Timetable:</b> origins, destinations and planned stops. Network Rail.</li>
+        <li><b>Station boards:</b> National Rail, via the Rail Data Marketplace.</li>
+        <li><b>Map:</b> © OpenStreetMap contributors. <b>Stations:</b> uk-railway-stations, ODbL.</li>
+      </ul>
+      <p class="fine">Contains information of Network Rail Infrastructure Limited licensed under the Open Government Licence. Departure and arrival information: National Rail.</p>
+    </div>
+  </section>
   <section id="boardsview" class="page" hidden></section>
   <main id="view" class="page" aria-live="polite" hidden></main>
 
