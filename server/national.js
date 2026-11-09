@@ -52,6 +52,7 @@ function attach(nat, t, b) {
 
 export function handleNational(batch, nat, stanoxCrs, now = Date.now()) {
   let changed = false;
+  nat.stanoxCrs = stanoxCrs;
   for (const msg of batch) {
     const type = msg.header && msg.header.msg_type;
     const b = msg.body || {};
@@ -124,6 +125,7 @@ export function detailOf(nat, id) {
   if (!t) return { error: 'This train is no longer being tracked.' };
   const d = nat.tt && nat.tt.loadedAt ? trainDetail(nat.tt, t) : trainDetail({ tiplocs: new Map() }, { ...t, sched: null });
   d.mode = 'live';
+  d.path = pathOf(nat, t);
   if (!d.matched && t.at) d.nextReport = t.next ? t.next.name : null;
   if (nat.tt && !nat.tt.loadedAt) d.note = 'The timetable is still loading, so stops will appear shortly.';
   return d;
@@ -222,4 +224,17 @@ export function linkPanelTrains(nat, raw, panels, maxKm = 60) {
       tr.desc = t && t.originName && t.destName ? `${t.originName} → ${t.destName}` : null;
     }
   }
+}
+
+// Where the train has actually been: every station it has reported at, in time order.
+// Timing points that aren't stations have no map position and are left out; nothing
+// is filled in between reports.
+export function pathOf(nat, t) {
+  const sx = nat.stanoxCrs || {};
+  const pts = [];
+  for (const [stanox, r] of Object.entries(t.reports || {})) {
+    const st = BY_CRS.get(sx[stanox]);
+    if (st) pts.push({ name: st.name, crs: st.crs, lat: st.lat, lon: st.lon, at: r.at, arr: r.arr || null, dep: r.dep || null });
+  }
+  return pts.sort((a, b) => a.at - b.at);
 }

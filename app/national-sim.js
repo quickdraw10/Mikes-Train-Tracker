@@ -146,7 +146,8 @@ export function createNationalSim(count = 900) {
       delayReason: t.delay >= 5 ? 'This train has been delayed by a fault with the signalling system' : null,
       id: t.code, code: t.code, delay: t.delay, cancelled: t.cancelled, operator: t.toc, matched: true, passenger: true,
       origin: t.path[0].name, dest: t.path[t.path.length - 1].name, next, stops,
-      last: { name: t.path[t.leg].name, event: 'Departed', at: times[t.leg] + t.delay * 60000 }
+      last: { name: t.path[t.leg].name, event: 'Departed', at: times[t.leg] + t.delay * 60000 },
+      path: t.path.slice(0, t.leg + 1).map((p, i) => ({ name: p.name, crs: p.crs, lat: p.lat, lon: p.lon, at: times[i] + t.delay * 60000 }))
     };
   }
 

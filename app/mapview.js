@@ -16,7 +16,7 @@ const CHIP_ZOOM = 11;      // headcode chips from here in
 const STATION_ZOOM = 11;   // station dots from here in
 const LABEL_ZOOM = 13;     // station names from here in
 
-let map, trainLayer, stationLayer, meLayer;
+let map, trainLayer, stationLayer, meLayer, pathLayer;
 let started = false;
 let refreshTimer, sheetTimer;
 
@@ -39,6 +39,7 @@ function start() {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   }).addTo(map);
   stationLayer = L.layerGroup().addTo(map);
+  pathLayer = L.layerGroup().addTo(map);
   trainLayer = L.layerGroup().addTo(map);
   meLayer = L.layerGroup().addTo(map);
   map.on('moveend', () => { drawStations(); loadTrains(); });
@@ -79,15 +80,19 @@ function drawTrains(res) {
   const list = res.trains || [];
   if (z >= CHIP_ZOOM) {
     // Trains drawn on top of each other (e.g. waiting at the same station) become one bubble
-    for (const group of groupByScreen(list, 34)) {
+    // the selected train always gets its own chip, on top
+    const sel = selected && list.find((t) => t.id === selected.id);
+    for (const group of groupByScreen(list.filter((t) => t !== sel), 34)) {
       if (group.length === 1) drawChip(group[0]);
       else drawGroup(group);
     }
+    if (sel) drawChip(sel);
   } else {
     for (const t of list) {
       const c = COLORS[t.band] || COLORS.none;
-      L.circleMarker([t.lat, t.lon], { radius: z <= 7 ? 3 : 5, color: '#0C1B38', weight: 1, fillColor: c, fillOpacity: 0.95 })
-        .on('click', () => trainSheet(t)).addTo(trainLayer);
+      const sel = selected && selected.id === t.id;
+      L.circleMarker([t.lat, t.lon], { radius: sel ? 8 : z <= 7 ? 3 : 5, color: sel ? '#E3B53A' : '#0C1B38', weight: sel ? 3 : 1, fillColor: c, fillOpacity: 0.95 })
+        .on('click', () => selectTrain(t)).addTo(trainLayer);
     }
   }
   const count = document.getElementById('map-count');
@@ -111,11 +116,11 @@ function drawChip(t) {
   const c = COLORS[t.band] || COLORS.none;
   const icon = L.divIcon({
     className: 'tchip-wrap',
-    html: `<span class="tchip"><b>${esc(t.code)}</b><i style="background:${c}">${esc(shortLate(t.delay, t.cancelled))}</i></span>`,
+    html: `<span class="tchip${selected && selected.id === t.id ? ' sel' : ''}"><b>${esc(t.code)}</b><i style="background:${c}">${esc(shortLate(t.delay, t.cancelled))}</i></span>`,
     iconSize: null, iconAnchor: [0, 14]
   });
   L.marker([t.lat, t.lon], { icon, keyboard: true, title: `${t.code} ${lateText(t.delay, t.cancelled)}` })
-    .on('click', () => trainSheet(t)).addTo(trainLayer);
+    .on('click', () => selectTrain(t)).addTo(trainLayer);
 }
 
 function drawGroup(items) {
@@ -147,7 +152,7 @@ function listSheet() {
   openSheet(`<div class="st-head"><div><div class="meta">${lastRes.mode === 'live' ? 'Live' : 'Demo'} · most late first</div><h2 id="sheet-title">${lastRes.total || 0} trains in view</h2></div></div>
     <div class="sheet-body list flush">${rows || '<div class="empty">No trains in view. Zoom out or move the map.</div>'}
     ${more > 0 ? `<p class="note">Showing the ${items.length} most late. Zoom in to see the other ${more}.</p>` : ''}</div>`, {
-    train: (id) => { const t = items.find((x) => x.id === id); if (t) trainSheet(t); }
+    train: (id) => { const t = items.find((x) => x.id === id); if (t) selectTrain(t, true); }
   });
 }
 document.getElementById('map-count').addEventListener('click', listSheet);
@@ -161,9 +166,74 @@ function groupSheet(items) {
   }).join('');
   openSheet(`<div class="st-head"><div><div class="meta">${items.length} trains</div><h2 id="sheet-title">${esc(here ? 'At or near ' + here : 'Trains here')}</h2></div></div>
     <div class="sheet-body list flush">${rows}</div>`, {
-    train: (id) => { const t = items.find((x) => x.id === id); if (t) trainSheet(t); }
+    train: (id) => { const t = items.find((x) => x.id === id); if (t) selectTrain(t, true); }
   });
 }
+
+// ---------- selecting a train: its route so far on the map ----------
+// First tap: the stations it has reported at since it started, joined up and highlighted.
+// Tap it again (or its headcode in the bar) for the full train screen. "Clear map" removes it.
+let selected = null, selTimer = null;
+function selectTrain(t, open = false) {
+  if (selected && selected.id === t.id && !open) return trainSheet(t);
+  selected = t;
+  drawSelBar(null);
+  loadPath(true);
+  clearInterval(selTimer);
+  selTimer = setInterval(() => loadPath(false), 30000);
+  if (lastRes) drawTrains(lastRes);
+  if (open) trainSheet(t);
+}
+async function loadPath(fit) {
+  if (!selected) return;
+  const id = selected.id;
+  const d = await api.train(id).catch(() => null);
+  if (!selected || selected.id !== id) return;
+  pathLayer.clearLayers();
+  const pts = d && !d.error && d.path ? d.path : [];
+  // where it is now, if it has moved on from the last reported station
+  const now = lastRes && (lastRes.trains || []).find((x) => x.id === id);
+  const line = pts.map((p) => [p.lat, p.lon]);
+  if (now && (!line.length || line[line.length - 1][0] !== now.lat || line[line.length - 1][1] !== now.lon)) line.push([now.lat, now.lon]);
+  if (line.length > 1) {
+    L.polyline(line, { color: '#0C1B38', weight: 9, opacity: 0.9, interactive: false }).addTo(pathLayer);
+    L.polyline(line, { color: '#E3B53A', weight: 4.5, opacity: 1, interactive: false }).addTo(pathLayer);
+  }
+  pts.forEach((p, i) => {
+    L.circleMarker([p.lat, p.lon], { radius: i === 0 ? 7 : 4.5, color: '#E3B53A', weight: 2, fillColor: i === 0 ? '#E3B53A' : '#0C1B38', fillOpacity: 1 })
+      .bindTooltip(`${p.name}${p.at ? ' · ' + hhmm(p.at) : ''}`, { direction: 'top', offset: [0, -6], className: 'stn-label' })
+      .addTo(pathLayer);
+  });
+  drawSelBar(d && !d.error ? d : null, pts);
+  if (fit && line.length) map.flyToBounds(L.latLngBounds(line).pad(0.25), { maxZoom: 13, duration: 0.6 });
+}
+function drawSelBar(d, pts = []) {
+  const bar = document.getElementById('sel-bar');
+  if (!selected) { bar.hidden = true; bar.innerHTML = ''; return; }
+  const t = selected;
+  const bd = bandOf(d ? d.delay : t.delay, d ? d.cancelled : t.cancelled);
+  const from = (d && d.origin) || t.origin || (pts[0] && pts[0].name);
+  const what = !d ? 'Loading its route…'
+    : pts.length ? `From ${esc(from || pts[0].name)} · ${pts.length} station${pts.length === 1 ? '' : 's'} reported`
+    : 'No station reports for this train yet';
+  bar.innerHTML = `<button class="sel-hc b-${bd}" data-sel="open" aria-label="Open ${esc(t.code)}">${esc(t.code)}</button>
+    <span class="sel-what">${what}<small>Tap the headcode for details</small></span>
+    <button class="sel-clear" data-sel="clear">Clear map</button>`;
+  bar.hidden = false;
+}
+function clearSelection() {
+  selected = null;
+  clearInterval(selTimer);
+  pathLayer.clearLayers();
+  drawSelBar();
+  if (lastRes) drawTrains(lastRes);
+}
+document.getElementById('sel-bar').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-sel]');
+  if (!b) return;
+  if (b.dataset.sel === 'clear') clearSelection();
+  else if (selected) trainSheet(selected);
+});
 
 // ---------- the train screen: from, to, next stop, on time, every stop ----------
 export async function trainSheet(t) {

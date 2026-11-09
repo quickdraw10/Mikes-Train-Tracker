@@ -37,6 +37,7 @@
       <div id="areas" class="areas" hidden></div>
       <button id="map-count" class="map-count" aria-live="polite" aria-label="List the trains in view"></button>
     </div>
+    <div id="sel-bar" class="sel-bar" hidden aria-live="polite"></div>
     <div class="map-buttons">
       <button id="zoom-in" class="mbtn" aria-label="Zoom in"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
       <button id="zoom-out" class="mbtn" aria-label="Zoom out"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button>
@@ -127,7 +128,8 @@
       <ul class="dots">
         <li><b>Network</b> is a wall map of the main lines. Each stretch between principal stations is lit by the average delay of the trains on it. Tap a stretch for its trains.</li>
         <li><b>Route</b> shows one line in both directions. Tap <b>Change</b> to pick a main line or build your own, or open any train and tap <b>Make this my route</b>.</li>
-        <li>On the <b>Map</b>, tap the Live pill for a list of the trains in view, most late first.</li>
+        <li>On the <b>Map</b>, tap a train to see the stations it has reported at since it started, joined up in gold. Tap it again, or its headcode in the bar, for the full details. <b>Clear map</b> removes it.</li>
+        <li>Tap the Live pill for a list of the trains in view, most late first.</li>
       </ul>
     </div>
 

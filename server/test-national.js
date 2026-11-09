@@ -1,6 +1,7 @@
 // Tests for the map (national train tracking) and station boards.
 import assert from 'node:assert/strict';
 import { createNational, handleNational, trainsIn, movesNear, positionOf } from './national.js';
+import { pathOf } from './national.js';
 import { normalise, delayBetween } from './ldb.js';
 import { searchStations, nearest } from '../app/geo.js';
 import { createNationalSim } from '../app/national-sim.js';
@@ -79,6 +80,16 @@ test('station search finds by name, start of a word, or code', () => {
 test('demo boards never list the station as its own destination', () => {
   const sim = createNationalSim(50);
   for (let i = 0; i < 20; i++) assert.ok(sim.board('NOT', 'dep').services.every((s) => s.place !== 'Nottingham'));
+});
+
+test('a train\'s path is the stations it has reported at, in order', () => {
+  const nat = createNational();
+  const now = Date.now();
+  handleNational([{ header: { msg_type: '0003' }, body: { train_id: '181D42MW08', loc_stanox: '18002', event_type: 'DEPARTURE', actual_timestamp: String(now - 60000), timetable_variation: '0', variation_status: 'ON TIME' } }], nat, stanoxCrs, now);
+  handleNational([{ header: { msg_type: '0003' }, body: { train_id: '181D42MW08', loc_stanox: '18001', event_type: 'ARRIVAL', actual_timestamp: String(now), timetable_variation: '0', variation_status: 'ON TIME' } }], nat, stanoxCrs, now);
+  const path = pathOf(nat, nat.trains.get('181D42MW08'));
+  assert.equal(path.length, 2);
+  assert.ok(path[0].at <= path[1].at);
 });
 
 console.log(`\n${passed} map and board tests passed`);
