@@ -235,6 +235,17 @@ document.getElementById('sel-bar').addEventListener('click', (e) => {
   else if (selected) trainSheet(selected);
 });
 
+// "14:32", "14:37" -> 5, across midnight; null if either is missing
+function minsLate(booked, actual) {
+  const m = (x) => { const r = /^(\d\d):(\d\d)/.exec(x || ''); return r ? Number(r[1]) * 60 + Number(r[2]) : null; };
+  const b = m(booked), a = m(actual);
+  if (b == null || a == null) return null;
+  let d = a - b;
+  if (d < -720) d += 1440;
+  if (d > 720) d -= 1440;
+  return d;
+}
+
 // ---------- the train screen: from, to, next stop, on time, every stop ----------
 export async function trainSheet(t) {
   clearInterval(sheetTimer);
@@ -264,7 +275,12 @@ export async function trainSheet(t) {
       const actual = typeof s.actual === 'number' ? hhmm(s.actual) : s.actual;
       let right;
       if (s.cancelled || (d.cancelled && s.state !== 'passed')) right = '<span class="c-bad">Cancelled</span>';
-      else if (s.state === 'passed') right = actual || '✓';
+      else if (s.state === 'passed') {
+        // the time it actually got there and how late it was at that point
+        const late = typeof s.late === 'number' ? s.late : minsLate(s.pass ? (s.working || s.booked) : s.booked, actual);
+        const lb = late == null ? '' : `<small class="c-${bandOf(late)}">${late >= 1 ? '+' + late : late <= -1 ? -late + ' early' : 'On time'}</small>`;
+        right = actual ? `${esc(actual)}${lb}` : '<small class="c-none">No report</small>';
+      }
       else if (s.expected && s.expected !== s.booked && /\d/.test(s.expected)) right = `<span class="c-${bd}">${esc(s.expected)}</span>`;
       else if (s.expected === 'Delayed') right = '<span class="c-mid">Delayed</span>';
       else right = s.pass ? 'pass' : 'On time';
@@ -391,9 +407,9 @@ async function openArea(a) {
       : !data.moves.length ? '<div class="empty">No train movements reported within 15 km in the last hour.</div>'
       : data.moves.map((m) => {
         const bd = bandOf(m.delay);
-        return `<div class="mrow"><span class="btime">${hhmm(m.at)}</span><span class="hc b-${bd}">${esc(m.code)}</span>
+        return `<button class="mrow" data-act="train" data-arg="${esc(m.id || m.code)}"><span class="btime">${hhmm(m.at)}</span><span class="hc b-${bd}">${esc(m.code)}</span>
           <span class="bplace"><b>${esc(m.event)} ${esc(m.name)}</b><small>${opBadge(m.toc)}${esc([m.dest ? 'to ' + m.dest : null, m.toc].filter(Boolean).join(' · '))}</small></span>
-          <span class="mins c-${bd}">${esc(shortLate(m.delay))}</span></div>`;
+          <span class="mins c-${bd}">${esc(shortLate(m.delay))}</span></button>`;
       }).join('');
     return `<div class="st-head"><div><div class="meta">Watching · 15 km around</div><h2 id="sheet-title">${esc(a.name)}</h2></div></div>
       <div class="sheet-body">${rows}</div>
@@ -405,6 +421,13 @@ async function openArea(a) {
   }
   openSheet(html(), {
     board: () => stationSheet(a.crs),
+    // first tap: show the train's route so far on the map; tap again for its details
+    train: (id) => {
+      const m = data && data.moves && data.moves.find((x) => (x.id || x.code) === id);
+      if (!m) return;
+      closeCustomSheet();
+      selectTrain({ id, code: m.code, delay: m.delay, toc: m.toc, dest: m.dest, last: m.name });
+    },
     unwatch: () => { saveList(AREAS_KEY, loadList(AREAS_KEY).filter((x) => x.crs !== a.crs)); drawAreas(); closeCustomSheet(); }
   }, () => clearInterval(sheetTimer));
   load();

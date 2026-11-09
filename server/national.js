@@ -72,8 +72,12 @@ export function handleNational(batch, nat, stanoxCrs, now = Date.now()) {
     t.delay = delayOf(b);
     if (b.loc_stanox) {
       const at = trustTime(b.actual_timestamp) || now;
-      (t.reports[b.loc_stanox] ||= {})[b.event_type === 'DEPARTURE' ? 'dep' : 'arr'] = at;
-      t.reports[b.loc_stanox].at = at;
+      const rp = (t.reports[b.loc_stanox] ||= {});
+      const dep = b.event_type === 'DEPARTURE';
+      rp[dep ? 'dep' : 'arr'] = at;
+      // TRUST's own lateness at this point (minutes; negative = early)
+      rp[dep ? 'lateDep' : 'lateArr'] = t.delay;
+      rp.at = at;
     }
     if (b.planned_timestamp) t.lastMove = { loc_stanox: b.loc_stanox, planned_timestamp: b.planned_timestamp };
     attach(nat, t, b);
@@ -164,6 +168,12 @@ export function mergeLive(d, live) {
   const passed = d.stops.filter((s) => s.state === 'passed');
   const firstAhead = live.stops[0];
   const keep = passed.filter((s) => s.name !== firstAhead.name);
+  // fill in actual times we didn't see from TRUST with National Rail's own record
+  for (const s of keep) {
+    if (s.actual) continue;
+    const p = (live.previous || []).find((x) => (s.crs && x.crs === s.crs) || x.name === s.name);
+    if (p && p.actual) { s.actual = p.actual; s.late = minsLate(p.booked, p.actual); }
+  }
   const ahead = live.stops.map((s) => ({
     ...s, state: s.actual ? 'passed' : 'due',
     expected: s.cancelled ? null : s.expected
@@ -237,4 +247,15 @@ export function pathOf(nat, t) {
     if (st) pts.push({ name: st.name, crs: st.crs, lat: st.lat, lon: st.lon, at: r.at, arr: r.arr || null, dep: r.dep || null });
   }
   return pts.sort((a, b) => a.at - b.at);
+}
+
+// "14:32" booked, "14:37" actual -> 5 (across midnight too); null if either is missing
+export function minsLate(booked, actual) {
+  const m = (x) => { const r = /^(\d\d):(\d\d)/.exec(x || ''); return r ? Number(r[1]) * 60 + Number(r[2]) : null; };
+  const b = m(booked), a = m(actual);
+  if (b == null || a == null) return null;
+  let d = a - b;
+  if (d < -720) d += 1440;
+  if (d > 720) d -= 1440;
+  return d;
 }

@@ -70,7 +70,7 @@ export function createNationalSim(count = 900) {
     return Math.max(2, km(a.lat, a.lon, b.lat, b.lon) / 1.3);
   }
   function note(t, stn, event, now) {
-    log.push({ at: now, crs: stn.crs, name: stn.name, lat: stn.lat, lon: stn.lon, code: t.code, toc: t.toc, event, delay: t.delay, dest: t.path[t.path.length - 1].name });
+    log.push({ at: now, id: t.code, crs: stn.crs, name: stn.name, lat: stn.lat, lon: stn.lon, code: t.code, toc: t.toc, event, delay: t.delay, dest: t.path[t.path.length - 1].name });
     if (log.length > 4000) log.splice(0, log.length - 4000);
   }
 

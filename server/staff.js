@@ -95,7 +95,12 @@ export function serviceToLive(svc, boardStation) {
     operator: svc.operator || null, operatorCode: svc.operatorCode || null, length: Number(svc.length) || null,
     cancelled: Boolean(svc.isCancelled), cancelReason: textOf(svc.cancelReason, 'canc'), delayReason: textOf(svc.delayReason, 'late'),
     origin: names(svc.origin), dest: names(svc.destination),
-    stops: [here, ...ahead]
+    stops: [here, ...ahead],
+    // where it has already been, with actual times (National Rail)
+    previous: list(svc.previousLocations).map((l) => ({
+      name: l.locationName || l.tiploc, tiploc: l.tiploc || null, crs: l.crs || null, pass: Boolean(l.isPass),
+      booked: hm(l.sta || l.std), bookedDep: hm(l.std), actual: hm(l.ata || l.atd), actualDep: hm(l.atd)
+    }))
   };
 }
 

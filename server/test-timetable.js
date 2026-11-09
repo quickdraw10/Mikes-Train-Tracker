@@ -75,6 +75,7 @@ test('live train gets origin, destination, operator, next stop with expected tim
   assert.equal(d.next.expected, '14:37');
   assert.deepEqual(d.stops.map((s) => s.name), ['Doncaster', 'Adwick', 'Wakefield Kirkgate', 'Leeds']); // passing points left out
   assert.equal(d.stops[1].state, 'passed');
+  assert.equal(d.stops[1].late, 5, 'lateness at that point, from TRUST');
   assert.equal(d.stops[3].platform, '15'); // Monday's overlay
 });
 
@@ -160,6 +161,11 @@ test('live National Rail stops replace the timetable ahead, including cancelled 
   assert.equal(d.stops[4].hiddenPlatform, '15');
   assert.equal(d.stops[4].expected, '14:55');
   assert.equal(d.delayReason, 'A late running train');
+  // a passed stop TRUST didn't report gets National Rail's actual time and lateness
+  const d2 = mergeLive({ stops: [{ name: 'Doncaster', crs: 'DON', booked: '14:00', state: 'passed' }, { name: 'Adwick', state: 'due' }] },
+    serviceToLive({ ...svc, previousLocations: [{ locationName: 'Doncaster', crs: 'DON', std: '2026-11-09T14:00:00', atd: '2026-11-09T14:03:00' }] }, { name: 'Adwick', crs: 'AWK' }));
+  assert.equal(d2.stops[0].actual, '14:03');
+  assert.equal(d2.stops[0].late, 3);
   assert.equal(staffTime(Date.UTC(2026, 6, 1, 13, 5, 9)), '20260701T140509'); // BST
 });
 

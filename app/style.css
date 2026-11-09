@@ -398,3 +398,5 @@ body.panel-portrait .turn-hint { display: block; }
   body[data-tab="panel"] .landbox { margin: 0 max(8px, env(safe-area-inset-left)); }
   body[data-tab="panel"] .landbox svg { max-height: calc(100vh - var(--tabs-h) - 52px); }
 }
+.stop .sa small { display: block; font: 600 11px var(--body); }
+button.mrow { width: 100%; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }

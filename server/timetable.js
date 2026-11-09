@@ -217,7 +217,10 @@ export function trainDetail(tt, t) {
     const passed = i <= lastIdx;
     const stop = {
       name: nameOfTiploc(tt, l.t), crs: (tt.tiplocs.get(l.t) || {}).crs || null, booked: hhmmOf(booked), platform: l.plat,
-      actual: rep ? rep.at : null, state: passed ? 'passed' : 'due',
+      // the actual time and TRUST's own lateness there: arrival for calls, departure at the start
+      actual: rep ? (i === 0 ? rep.dep ?? rep.at : rep.arr ?? rep.dep ?? rep.at) : null,
+      late: rep ? (i === 0 ? rep.lateDep ?? rep.lateArr : rep.lateArr ?? rep.lateDep) ?? null : null,
+      state: passed ? 'passed' : 'due',
       expected: !passed && booked != null && !t.cancelled ? hhmmOf(booked + Math.max(0, delay)) : null
     };
     out.stops.push(stop);
