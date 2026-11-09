@@ -6,7 +6,7 @@ import { API_BASE } from './config.js';
 import { buildView, band } from './model.js';
 import { createSim } from './sim.js';
 import * as api from './api.js';
-import { closeCustomSheet, openSheet as openCustom, toast, bandOf } from './ui.js';
+import { closeCustomSheet, openSheet as openCustom, toast, bandOf, opBadge } from './ui.js';
 import { showMap, trainSheet, stationSheet } from './mapview.js';
 import * as route from './route.js';
 import { BY_CRS, searchStations } from './geo.js';
@@ -279,7 +279,7 @@ function routeTrainsSheet() {
   const row = (t) => {
     const bd = bandOf(t.delay, t.cancelled);
     return `<button class="row" data-act="train" data-arg="${esc(t.id)}"><span class="hc b-${bd}">${esc(t.code)}</span>
-      <span class="what">${t.dest ? 'to ' + esc(t.dest) : 'towards ' + esc(t.dir === 'down' ? bottom : top)}<small class="sub-line">${esc([t.last ? 'last seen ' + t.last : null, t.toc].filter(Boolean).join(' · '))}</small></span><span class="mins c-${bd}">${esc(shortLate(t.delay, t.cancelled))}</span></button>`;
+      <span class="what">${t.dest ? 'to ' + esc(t.dest) : 'towards ' + esc(t.dir === 'down' ? bottom : top)}<small class="sub-line">${opBadge(t.toc)}${esc([t.last ? 'last seen ' + t.last : null, t.toc].filter(Boolean).join(' · '))}</small></span><span class="mins c-${bd}">${esc(shortLate(t.delay, t.cancelled))}</span></button>`;
   };
   openCustom(`<div class="st-head"><div><div class="meta">${esc(r.name)}</div><h2 id="sheet-title">${late.length} of ${all.length} trains running late</h2></div></div>
     <div class="sheet-body list flush">

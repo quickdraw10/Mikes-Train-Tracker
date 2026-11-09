@@ -7,7 +7,7 @@ import * as api from './api.js';
 import { STATIONS } from './stations.js';
 import { BY_CRS, nearest, searchStations } from './geo.js';
 import { routeFromStops } from './route.js';
-import { esc, hhmm, lateText, shortLate, bandOf, openSheet, updateSheet, sheetOpen, closeCustomSheet, loadList, saveList, toast, boardHTML } from './ui.js';
+import { opBadge, esc, hhmm, lateText, shortLate, bandOf, openSheet, updateSheet, sheetOpen, closeCustomSheet, loadList, saveList, toast, boardHTML } from './ui.js';
 
 const AREAS_KEY = 'mtt.areas';
 const STATIONS_KEY = 'mtt.stations';
@@ -142,7 +142,7 @@ function listSheet() {
     const bd = bandOf(t.delay, t.cancelled);
     const where = t.dest ? 'to ' + t.dest : t.next ? 'next ' + t.next : t.last ? 'at ' + t.last : '';
     return `<button class="row" data-act="train" data-arg="${esc(t.id)}"><span class="hc b-${bd}">${esc(t.code)}</span>
-      <span class="what">${esc(where)}${t.toc ? `<small class="sub-line">${esc(t.toc)}</small>` : ''}</span><span class="mins c-${bd}">${esc(shortLate(t.delay, t.cancelled))}</span></button>`;
+      <span class="what">${esc(where)}${t.toc ? `<small class="sub-line">${opBadge(t.toc)}${esc(t.toc)}</small>` : ''}</span><span class="mins c-${bd}">${esc(shortLate(t.delay, t.cancelled))}</span></button>`;
   }).join('');
   openSheet(`<div class="st-head"><div><div class="meta">${lastRes.mode === 'live' ? 'Live' : 'Demo'} · most late first</div><h2 id="sheet-title">${lastRes.total || 0} trains in view</h2></div></div>
     <div class="sheet-body list flush">${rows || '<div class="empty">No trains in view. Zoom out or move the map.</div>'}
@@ -157,7 +157,7 @@ function groupSheet(items) {
   const rows = [...items].sort((a, b) => RANK[b.band] - RANK[a.band] || (b.delay ?? 0) - (a.delay ?? 0)).map((t) => {
     const bd = bandOf(t.delay, t.cancelled);
     return `<button class="row" data-act="train" data-arg="${esc(t.id)}"><span class="hc b-${bd}">${esc(t.code)}</span>
-      <span class="what">${esc(t.dest ? 'to ' + t.dest : t.next ? 'next ' + t.next : 'at ' + t.last)}</span><span class="mins c-${bd}">${esc(shortLate(t.delay, t.cancelled))}</span></button>`;
+      <span class="what">${esc(t.dest ? 'to ' + t.dest : t.next ? 'next ' + t.next : 'at ' + t.last)}${t.toc ? `<small class="sub-line">${opBadge(t.toc)}${esc(t.toc)}</small>` : ''}</span><span class="mins c-${bd}">${esc(shortLate(t.delay, t.cancelled))}</span></button>`;
   }).join('');
   openSheet(`<div class="st-head"><div><div class="meta">${items.length} trains</div><h2 id="sheet-title">${esc(here ? 'At or near ' + here : 'Trains here')}</h2></div></div>
     <div class="sheet-body list flush">${rows}</div>`, {
@@ -209,7 +209,7 @@ export async function trainSheet(t) {
     const toggle = passCount ? `<button class="detail-toggle" data-act="detail" aria-pressed="${detailed}">${detailed ? 'Hide' : 'Show'} ${passCount} passing point${passCount === 1 ? '' : 's'}</button>` : '';
     const source = d && d.source === 'darwin' ? '<p class="credit">Stops ahead live from National Rail</p>' : d && d.liveNote ? `<p class="credit">${esc(d.liveNote)}</p>` : '';
     return `<div class="sheet-top"><div class="big b-${bd}">${esc(shortLate(delay, cancelled))}</div>
-      <div><div class="meta">${esc(t.code)}${op ? ' · ' + esc(op) : ''}</div><h2 id="sheet-title">${title}</h2><p class="c-${bd === 'none' ? 'none' : bd}">${esc(lateText(delay, cancelled))}</p></div></div>
+      <div><div class="meta">${esc(t.code)}${op ? ' · ' + opBadge(op, d && d.operatorCode) + esc(op) : ''}</div><h2 id="sheet-title">${title}</h2><p class="c-${bd === 'none' ? 'none' : bd}">${esc(lateText(delay, cancelled))}</p></div></div>
       ${next}
       ${last ? `<p class="lastseen">${esc(last.event || 'Seen')} ${esc(last.name)}${last.at ? ' at ' + hhmm(last.at) : ''}</p>` : ''}
       ${extras.length ? `<p class="lastseen">${extras.join(' · ')}</p>` : ''}
@@ -322,7 +322,7 @@ async function openArea(a) {
       : data.moves.map((m) => {
         const bd = bandOf(m.delay);
         return `<div class="mrow"><span class="btime">${hhmm(m.at)}</span><span class="hc b-${bd}">${esc(m.code)}</span>
-          <span class="bplace"><b>${esc(m.event)} ${esc(m.name)}</b><small>${esc([m.dest ? 'to ' + m.dest : null, m.toc].filter(Boolean).join(' · '))}</small></span>
+          <span class="bplace"><b>${esc(m.event)} ${esc(m.name)}</b><small>${opBadge(m.toc)}${esc([m.dest ? 'to ' + m.dest : null, m.toc].filter(Boolean).join(' · '))}</small></span>
           <span class="mins c-${bd}">${esc(shortLate(m.delay))}</span></div>`;
       }).join('');
     return `<div class="st-head"><div><div class="meta">Watching · 15 km around</div><h2 id="sheet-title">${esc(a.name)}</h2></div></div>

@@ -42,7 +42,7 @@ export function normalise(data, type) {
         delay: cancelled ? null : delayBetween(booked, expected),
         place: type === 'arr' ? names(s.origin) : names(s.destination),
         platform: s.platform || null,
-        toc: s.operator || null,
+        toc: s.operator || null, tocCode: s.operatorCode || null,
         reason: s.cancelReason || s.delayReason || null
       };
     });
@@ -62,7 +62,7 @@ export function normaliseStaff(data) {
       departed: Boolean(s.atd),
       delay: cancelled ? null : expected && /\d/.test(expected) ? delayBetween(booked, expected) : expected === 'On time' ? 0 : null,
       place: names(s.destination) || '—', platform: s.platform || null, platformHidden: Boolean(s.platformIsHidden),
-      toc: s.operator || null, passenger: s.isPassengerService !== false,
+      toc: s.operator || null, tocCode: s.operatorCode || null, passenger: s.isPassengerService !== false,
       reason: textOf(s.cancelReason, 'canc') || textOf(s.delayReason, 'late') || null,
       length: Number(s.length) || null
     };

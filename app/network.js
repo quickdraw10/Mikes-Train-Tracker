@@ -9,7 +9,7 @@ import * as api from './api.js';
 import { BY_CRS } from './geo.js';
 import { band } from './model.js';
 import { place } from './route.js';
-import { esc, shortLate, bandOf, openSheet } from './ui.js';
+import { esc, shortLate, bandOf, openSheet, opBadge } from './ui.js';
 
 const line = (id, name, codes) => ({ id, name, crs: codes.split(' ') });
 export const LINES = [
@@ -170,7 +170,7 @@ function segSheet(key) {
   const rows = items.map((t) => {
     const bd = bandOf(t.delay, t.cancelled);
     return `<button class="row" data-act="train" data-arg="${esc(t.id)}"><span class="hc b-${bd}">${esc(t.code)}</span>
-      <span class="what">${t.dir === 'down' ? '→ ' + esc(b) : '→ ' + esc(a)}${t.dest ? `<small class="sub-line">to ${esc(t.dest)}</small>` : ''}</span><span class="mins c-${bd}">${esc(shortLate(t.delay, t.cancelled))}</span></button>`;
+      <span class="what">${t.dir === 'down' ? '→ ' + esc(b) : '→ ' + esc(a)}${t.dest || t.toc ? `<small class="sub-line">${opBadge(t.toc)}${t.dest ? 'to ' + esc(t.dest) : esc(t.toc)}</small>` : ''}</span><span class="mins c-${bd}">${esc(shortLate(t.delay, t.cancelled))}</span></button>`;
   }).join('');
   openSheet(`<div class="st-head"><div><div class="meta">${esc(l.name)}</div><h2 id="sheet-title">${esc(a)} – ${esc(b)}</h2></div></div>
     <div class="sheet-body list flush">${rows || '<div class="empty">No trains on this stretch right now.</div>'}</div>

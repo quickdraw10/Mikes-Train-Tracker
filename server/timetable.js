@@ -14,14 +14,8 @@ import { BY_CRS } from '../app/geo.js';
 
 const URL_SCHEDULE = process.env.NR_SCHEDULE_URL || 'https://publicdatafeeds.networkrail.co.uk/ntrod/CifFileAuthenticate?type=CIF_ALL_FULL_DAILY&day=toc-full';
 
-export const OPERATORS = {
-  AW: 'Transport for Wales', CC: 'c2c', CH: 'Chiltern Railways', CS: 'Caledonian Sleeper', EM: 'East Midlands Railway',
-  ES: 'Eurostar', GC: 'Grand Central', GN: 'Great Northern', GR: 'LNER', GW: 'GWR', GX: 'Gatwick Express', HT: 'Hull Trains',
-  HX: 'Heathrow Express', IL: 'Island Line', LD: 'Lumo', LE: 'Greater Anglia', LM: 'West Midlands Trains', LO: 'London Overground',
-  ME: 'Merseyrail', NT: 'Northern', NY: 'North Yorkshire Moors Railway', SE: 'Southeastern', SN: 'Southern', SR: 'ScotRail',
-  SW: 'South Western Railway', TL: 'Thameslink', TP: 'TransPennine Express', TW: 'Tyne and Wear Metro', VT: 'Avanti West Coast',
-  WR: 'West Coast Railways', XC: 'CrossCountry', XR: 'Elizabeth line', ZZ: null
-};
+export { OPERATORS } from '../app/operators.js';
+import { OPERATORS } from '../app/operators.js';
 const FREIGHT_CATS = /^[ADEH]|^J|^P[ABCDEFGHJKLMNPQRSTUVWXYZ]?$/;
 
 // "0718H" -> 438.5 minutes after midnight; empty -> null

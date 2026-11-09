@@ -151,7 +151,7 @@ if (live) {
   setInterval(() => { sim.tick(); schedulePush(); }, 4000);
   const nsim = createNationalSim();
   setInterval(() => nsim.tick(), 10000);
-  national = { trains: nsim.trains, moves: nsim.moves, board: nsim.board, train: nsim.train };
+  national = { trains: (box) => nsim.trains(box), moves: nsim.moves, board: nsim.board, train: nsim.train };
   console.log('No NR_USER / NR_PASS set — running on demo trains.');
 }
 

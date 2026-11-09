@@ -171,7 +171,7 @@ export function mergeLive(d, live) {
   return {
     ...d, stops, next, source: 'darwin',
     origin: d.origin || live.origin, dest: live.dest || d.dest,
-    operator: d.operator || live.operator, cancelled: d.cancelled || live.cancelled,
+    operator: d.operator || live.operator, operatorCode: live.operatorCode || null, cancelled: d.cancelled || live.cancelled,
     cancelReason: live.cancelReason, delayReason: live.delayReason, length: live.length,
     matched: true
   };

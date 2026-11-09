@@ -2,12 +2,20 @@
 // and the station board markup used by both the map and the Boards tab.
 
 import { band } from './model.js';
+import { opCode, OPERATORS } from './operators.js';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 export const hhmm = (t) => new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' });
 export const lateText = (d, cancelled) => cancelled ? 'Cancelled' : d == null ? 'No timing yet' : d >= 1 ? `${d} min late` : d <= -1 ? `${-d} min early` : 'On time';
 export const shortLate = (d, cancelled) => cancelled ? 'Canc' : d == null ? '–' : d >= 1 ? `+${d}` : 'On time';
 export const bandOf = (delay, cancelled) => band(cancelled ? { cancelled: true } : delay == null ? null : { delay });
+
+// Operator badge: the official two-letter code in the app's own style (no logos)
+export function opBadge(nameOrCode, code) {
+  const c = opCode(code) || opCode(nameOrCode);
+  if (!c) return '';
+  return `<span class="op" title="${esc(OPERATORS[c] || nameOrCode || c)}">${c}</span>`;
+}
 
 // ---- bottom sheet ----
 const $sheet = document.getElementById('sheet');
@@ -76,7 +84,7 @@ export function boardHTML(b, type) {
     return `<div class="brow${s.passenger === false ? ' nonpass' : ''}">
       <span class="btime">${esc(s.booked)}</span>
       <span class="bexp c-${bd}">${esc(s.departed ? 'Dep ' + (s.expected === 'On time' ? s.booked : s.expected) : exp)}</span>
-      <span class="bplace"><b>${s.headcode ? `<span class="hcode">${esc(s.headcode)}</span>` : ''}${esc(s.place)}</b><small>${esc([s.passenger === false ? 'Not in passenger service' : null, s.toc, s.length ? s.length + ' coaches' : null, s.reason].filter(Boolean).join(' · '))}</small></span>
+      <span class="bplace"><b>${s.headcode ? `<span class="hcode">${esc(s.headcode)}</span>` : ''}${esc(s.place)}</b><small>${opBadge(s.toc, s.tocCode)}${esc([s.passenger === false ? 'Not in passenger service' : null, s.toc, s.length ? s.length + ' coaches' : null, s.reason].filter(Boolean).join(' · '))}</small></span>
       <span class="bplat${s.platform ? '' : ' none'}${s.platformHidden ? ' hidden-plat' : ''}" title="${s.platformHidden ? 'Not shown on public screens' : ''}">${esc(s.platform || '–')}</span>
     </div>`;
   }).join('');
