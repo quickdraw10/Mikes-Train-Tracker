@@ -152,7 +152,7 @@ function listSheet() {
   openSheet(`<div class="st-head"><div><div class="meta">${lastRes.mode === 'live' ? 'Live' : 'Demo'} · most late first</div><h2 id="sheet-title">${lastRes.total || 0} trains in view</h2></div></div>
     <div class="sheet-body list flush">${rows || '<div class="empty">No trains in view. Zoom out or move the map.</div>'}
     ${more > 0 ? `<p class="note">Showing the ${items.length} most late. Zoom in to see the other ${more}.</p>` : ''}</div>`, {
-    train: (id) => { const t = items.find((x) => x.id === id); if (t) selectTrain(t, true); }
+    train: (id) => { const t = items.find((x) => x.id === id); if (t) { closeCustomSheet(); selectTrain(t); } }
   });
 }
 document.getElementById('map-count').addEventListener('click', listSheet);
@@ -166,7 +166,7 @@ function groupSheet(items) {
   }).join('');
   openSheet(`<div class="st-head"><div><div class="meta">${items.length} trains</div><h2 id="sheet-title">${esc(here ? 'At or near ' + here : 'Trains here')}</h2></div></div>
     <div class="sheet-body list flush">${rows}</div>`, {
-    train: (id) => { const t = items.find((x) => x.id === id); if (t) selectTrain(t, true); }
+    train: (id) => { const t = items.find((x) => x.id === id); if (t) { closeCustomSheet(); selectTrain(t); } }
   });
 }
 
