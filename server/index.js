@@ -20,7 +20,7 @@ import { handleTd } from './td.js';
 import { handleSClass } from './sclass.js';
 import { handleTrust, buildStanoxIndex, prune } from './trust.js';
 import { applyStanox, loadStanoxCrs, downloadCorpus, haveCorpus } from './corpus.js';
-import { createNational, handleNational, trainsIn, movesNear, pruneNational, attachAll, liveDetailOf } from './national.js';
+import { createNational, handleNational, trainsIn, movesNear, pruneNational, attachAll, liveDetailOf, linkPanelTrains } from './national.js';
 import { staffBoard } from './staff.js';
 import { createTimetable, loadTimetable } from './timetable.js';
 import { downloadSmart, buildStationPanel, smartDebug } from './panelbuild.js';
@@ -133,6 +133,8 @@ if (live) {
     }
   });
   setInterval(() => { prune(raw); pruneNational(nat); }, 10 * 60 * 1000);
+  // match panel headcodes to real trains (by headcode and place) every few seconds
+  setInterval(() => { linkPanelTrains(nat, raw, livePanels || []); }, 5000);
   national = {
     trains: (box, max) => trainsIn(nat, box, Date.now(), max),
     moves: (lat, lon, r) => movesNear(nat, lat, lon, r),

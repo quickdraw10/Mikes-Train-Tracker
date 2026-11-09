@@ -4,7 +4,8 @@
 
 import assert from 'node:assert/strict';
 import { ROUTES } from '../app/layout.js';
-import { emptyState, buildView as realBuildView, signalState } from '../app/model.js';
+import { emptyState, buildView as realBuildView, signalState, fringeLists } from '../app/model.js';
+import { createNational, handleNational, linkPanelTrains } from './national.js';
 
 // A small panel in area VC for these tests (the app's own panel is York)
 const TEST_PANEL = { id: 't', name: 'Test', subtitle: '', area: 'VC', ends: ['A', 'B'], tracks: [
@@ -76,16 +77,38 @@ test('TD from other areas is ignored', () => {
   assert.deepEqual(raw.berths, {});
 });
 
-test('panel berth shows the TRUST delay of the train in it', () => {
+test('panel berth shows the delay of the real train: same headcode, near the station', () => {
   const raw = emptyState();
   handleTd([{ CC_MSG: { area_id: 'VC', to: '0102', descr: '2C38', time: '1' } }], raw, areas);
-  handleTrust([{ header: { msg_type: '0003' }, body: { train_id: '722C38MW08', loc_stanox: '12345', event_type: 'DEPARTURE', timetable_variation: '7', variation_status: 'LATE', toc_id: '88' } }], raw, idx);
-  const v = buildView(raw);
+  // Two trains share the headcode 2C38: one near Victoria, one at York
+  const nat = createNational();
+  const sx = { '87001': 'CLJ', '16001': 'YRK' };
+  handleNational([{ header: { msg_type: '0003' }, body: { train_id: '512C38MW08', loc_stanox: '16001', event_type: 'DEPARTURE', timetable_variation: '30', variation_status: 'LATE' } }], nat, sx);
+  handleNational([{ header: { msg_type: '0003' }, body: { train_id: '722C38MW08', loc_stanox: '87001', event_type: 'DEPARTURE', timetable_variation: '7', variation_status: 'LATE' } }], nat, sx);
+  const panel = { ...TEST_PANEL, crs: 'VIC' };
+  linkPanelTrains(nat, raw, [panel]);
+  const v = realBuildView(raw, Date.now(), [panel]);
   const b = v.panels[0].tracks[1].berths[0];
   assert.equal(b.code, '2C38');
-  assert.equal(b.delay, 7);
-  assert.equal(b.band, 'mid');
+  assert.equal(b.delay, 7, 'the Clapham one, not the York one');
+  assert.equal(b.natId, '722C38MW08');
   assert.equal(v.panels[0].late[0].code, '2C38');
+  // a headcode with no real train nearby has no delay rather than a wrong one
+  handleTd([{ CC_MSG: { area_id: 'VC', to: '0104', descr: '9Z99', time: '1' } }], raw, areas);
+  linkPanelTrains(nat, raw, [panel]);
+  assert.equal(realBuildView(raw, Date.now(), [panel]).panels[0].tracks[1].berths[1].delay, null);
+});
+
+test('fringe: trains stepping towards the station are approaching, away are just gone', () => {
+  const raw = emptyState();
+  const fringe = { 'VC:0900': [0, 3], 'VC:0910': [0, 2], 'VC:0920': [0, 1], 'VC:0950': [1, 1], 'VC:0960': [1, 2] };
+  handleTd([{ CC_MSG: { area_id: 'VC', to: '0900', descr: '1A01', time: '1' } }, { CA_MSG: { area_id: 'VC', from: '0900', to: '0910', descr: '1A01', time: '1' } },
+    { CC_MSG: { area_id: 'VC', to: '0950', descr: '1B02', time: '1' } }, { CA_MSG: { area_id: 'VC', from: '0950', to: '0960', descr: '1B02', time: '1' } },
+    { CC_MSG: { area_id: 'VC', to: '0920', descr: '2C03', time: '1' } }], raw, areas);
+  const f = fringeLists(raw, fringe);
+  assert.deepEqual(f[0].approaching.map((t) => t.code), ['1A01']);
+  assert.deepEqual(f[1].leaving.map((t) => t.code), ['1B02']);
+  assert.deepEqual(f[0].unknown.map((t) => t.code), ['2C03'], 'not stepped yet: not guessed');
 });
 
 test('TRUST at route stations places the train and colours the section', () => {
@@ -130,7 +153,11 @@ test('summer timestamps lose the extra hour, winter ones are left alone', () => 
 test('change of identity moves the train to its new headcode', () => {
   const raw = emptyState();
   handleTd([{ CC_MSG: { area_id: 'VC', to: '0101', descr: '1J24' } }], raw, areas);
-  handleTrust([{ header: { msg_type: '0003' }, body: { train_id: '721J24MW08', loc_stanox: '12345', event_type: 'ARRIVAL', timetable_variation: '5', variation_status: 'LATE' } }], raw, idx);
+  // another train elsewhere with the same headcode changing identity must not touch ours
+  raw.trains['1J24'].trainId = '721J24MW08';
+  raw.trains['1J24'].delay = 5;
+  handleTrust([{ header: { msg_type: '0007' }, body: { train_id: '091J24MW08', revised_train_id: '091J55MW08' } }], raw, idx);
+  assert.equal(raw.berths['VC:0101'], '1J24');
   handleTrust([{ header: { msg_type: '0007' }, body: { train_id: '721J24MW08', revised_train_id: '721J99MW08' } }], raw, idx);
   assert.equal(raw.trains['1J24'], undefined);
   assert.equal(raw.trains['1J99'].delay, 5);

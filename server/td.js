@@ -23,6 +23,8 @@ export function handleTd(batch, raw, areas, now = Date.now()) {
     if (type === 'CA_MSG') {
       delete raw.berths[a + ':' + m.from];
       raw.berths[a + ':' + m.to] = descr;
+      // The last step each train made, so the panel can tell approaching from just gone
+      (raw.steps ||= {})[a + ':' + descr] = { from: a + ':' + m.from, to: a + ':' + m.to, at: now };
     } else if (type === 'CB_MSG') {
       delete raw.berths[a + ':' + m.from];
     } else if (type === 'CC_MSG') {

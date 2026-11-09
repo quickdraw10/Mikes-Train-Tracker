@@ -61,7 +61,8 @@ export function handleTrust(batch, raw, stanoxIndex, now = Date.now()) {
       // Change of identity: the train now runs under a new headcode
       const next = headcodeOf(b.revised_train_id);
       const t = raw.trains[code];
-      if (t && next && next !== code) {
+      // only for the very train we have pinned, never just a train sharing the headcode
+      if (t && t.trainId === b.train_id && next && next !== code) {
         raw.trains[next] = { ...t, code: next, trainId: b.revised_train_id };
         delete raw.trains[code];
         for (const [k, v] of Object.entries(raw.berths)) if (v === code) raw.berths[k] = next;
@@ -77,11 +78,11 @@ export function handleTrust(batch, raw, stanoxIndex, now = Date.now()) {
 
     const hits = stanoxIndex.get(b.loc_stanox);
     const t = raw.trains[code];
-    // Only keep trains we can see: on a panel (already known from TD) or at a route station
-    if (!hits && !t) continue;
-    // Headcodes repeat around the country: once a train is pinned to a full
-    // train_id at one of our stations, ignore other trains sharing its headcode
-    if (!hits && t.trainId && t.trainId !== b.train_id) continue;
+    // Only route stations here. Panel trains get their delay from the national
+    // tracker, matched by headcode AND place (linkPanelTrains in national.js), because
+    // the same headcode can be running elsewhere in the country at the same time.
+    if (!hits) continue;
+    if (t && t.trainId && t.trainId !== b.train_id) continue;
     const tr = t || train(raw, code);
     tr.delay = delayOf(b);
     tr.trainId = b.train_id;
@@ -116,4 +117,5 @@ export function prune(raw, now = Date.now(), maxAge = 3 * 60 * 60 * 1000) {
   for (const [code, t] of Object.entries(raw.trains)) {
     if (!onBerth.has(code) && now - (t.seen || 0) > maxAge) delete raw.trains[code];
   }
+  for (const [k, st] of Object.entries(raw.steps || {})) if (now - st.at > maxAge) delete raw.steps[k];
 }

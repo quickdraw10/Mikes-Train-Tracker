@@ -192,3 +192,34 @@ export function pruneNational(nat, now = Date.now()) {
     if (now - (t.updated || 0) > 3 * 60 * 60000 || (t.terminated && now - t.updated > 15 * 60000)) nat.trains.delete(id);
   }
 }
+
+// The panels know trains only by headcode, which can repeat around the country.
+// Link each one to the national train with that headcode that was last reported
+// near the panel's station; if there isn't one, its delay stays unknown.
+export function linkPanelTrains(nat, raw, panels, maxKm = 60) {
+  const best = (code, st) => {
+    let pick = null;
+    for (const t of nat.trains.values()) {
+      if (t.code !== code || !t.at || t.terminated) continue;
+      const d = km(t.at.lat, t.at.lon, st.lat, st.lon);
+      if (d > maxKm) continue;
+      if (!pick || (t.updated || 0) > (pick.updated || 0)) pick = t;
+    }
+    return pick;
+  };
+  for (const p of panels) {
+    const st = p.crs && BY_CRS.get(p.crs);
+    if (!st) continue;
+    const areas = new Set(p.areas || [p.area]);
+    for (const [k, code] of Object.entries(raw.berths)) {
+      if (!code || !areas.has(k.split(':')[0])) continue;
+      const t = best(code, st);
+      const tr = (raw.trains[code] ||= { code, routes: {}, seen: Date.now() });
+      tr.natId = t ? t.id : null;
+      tr.delay = t ? t.delay : null;
+      tr.cancelled = t ? !!t.cancelled : false;
+      tr.toc = t ? t.toc : null;
+      tr.desc = t && t.originName && t.destName ? `${t.originName} → ${t.destName}` : null;
+    }
+  }
+}

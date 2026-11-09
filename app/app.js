@@ -157,8 +157,22 @@ function renderPanel() {
   return `${head}
     <div class="iecc-wrap"><svg class="iecc" viewBox="0 0 ${SVGW} ${H}" role="img" aria-label="Signal panel for ${esc(p.name)}">${g}</svg></div>
     <p class="note">Tap a headcode for that train. Pinch to zoom in.</p>
+    ${fringeHTML(p)}
     ${legend()}
     <section class="list"><div class="list-h">Late on this panel</div>${late}</section>`;
+}
+
+// Main lines either side: trains approaching and just gone, from the signalling berths
+function fringeHTML(p) {
+  if (!p.fringe) return '';
+  const box = (t) => `<button class="fr-train" data-train="${esc(t.code)}"><span class="hcbox-s b-${t.band}">${esc(t.code)}</span><small>${t.dist} ${t.dist === 1 ? 'section' : 'sections'}${t.delay != null || t.cancelled ? ' · ' + esc(shortLate(t.delay, t.cancelled)) : ''}</small></button>`;
+  const group = (label, list) => list.length ? `<div class="fr-row"><span class="fr-lbl">${label}</span><div class="fr-list">${list.slice(0, 8).map(box).join('')}</div></div>` : '';
+  const side = (i) => {
+    const f = p.fringe[i];
+    const body = group('Approaching', f.approaching) + group('Just gone', f.leaving) + group('Direction not seen yet', f.unknown);
+    return `<div class="fringe"><div class="fr-head">${i === 0 ? '◀ ' + esc(p.ends[0]) : esc(p.ends[1]) + ' ▶'}</div>${body || '<div class="fr-empty">No trains on the main lines this side</div>'}</div>`;
+  };
+  return `<section class="fringes" aria-label="Trains on the main lines either side">${side(0)}${side(1)}</section>`;
 }
 
 function legend() {
@@ -340,6 +354,13 @@ window.addEventListener('mtt:build', (e) => { switchTab('route'); routeBuilder(e
 
 // ---------- train sheet ----------
 function openSheet(code) {
+  // A panel headcode linked to a real train (same headcode, near this station) opens the full train screen
+  const p = ui.view.panels[ui.panel];
+  if (p && ui.tab === 'panel') {
+    const all = [...p.tracks.flatMap((t) => t.berths), ...p.late, ...(p.fringe || []).flatMap((f) => [...f.approaching, ...f.leaving, ...f.unknown])];
+    const hit = all.find((b) => b.code === code && b.natId);
+    if (hit) return trainSheet({ id: hit.natId, code, delay: hit.delay, cancelled: hit.cancelled });
+  }
   ui.selected = code;
   $sheet.dataset.kind = '';
   renderSheet();
@@ -359,6 +380,7 @@ function renderSheet() {
       <div><div class="meta">${esc(ui.selected)}</div><h2 id="sheet-title">${esc((t && t.desc) || 'Train ' + ui.selected)}</h2><p>${t ? esc(lateText(t.delay, t.cancelled)) : ''}</p></div>
     </div>
     <p>${last}</p>
+    <p class="note" style="padding:0">Not matched to a timetabled train yet: no train with this headcode has reported near here. Freight and short-notice trains often aren't in the timetable.</p>
     <button class="close">Close</button>`;
 }
 

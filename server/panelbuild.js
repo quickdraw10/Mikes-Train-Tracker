@@ -80,26 +80,61 @@ export function buildStationPanel(smart, cfg) {
   const link = (a, b) => { (edges.get(a) || edges.set(a, new Set()).get(a)).add(b); (edges.get(b) || edges.set(b, new Set()).get(b)).add(a); };
   const link2 = (r) => { const f = (r.FROMBERTH || '').trim(), t = (r.TOBERTH || '').trim(); if (okBerth(f) && okBerth(t)) link(key(r, f), key(r, t)); };
   for (const r of all) link2(r);
-  const used = new Set([...platformBerths, ...[...plats.values()].flatMap((x) => [...x.south, ...x.north])]);
-  const outer = (set) => { for (const b of set) for (const n of edges.get(b) || []) if (!used.has(n)) return n; return null; };
+  // An approach berth used by several platforms is part of the main line, not one road:
+  // it goes in the fringe (approaching / just left) so a train is never drawn twice.
+  const uses = new Map();
+  for (const x of plats.values()) for (const side of ['south', 'north']) for (const b of x[side]) uses.set(b, (uses.get(b) || 0) + 1);
+  const shared = { south: new Set(), north: new Set() };
+  for (const x of plats.values()) for (const side of ['south', 'north']) for (const b of [...x[side]]) if (uses.get(b) > 1) { x[side].delete(b); shared[side].add(b); }
 
+  const used = new Set([...platformBerths, ...[...plats.values()].flatMap((x) => [...x.south, ...x.north])]);
+  const outer = (set) => { for (const b of set) for (const n of edges.get(b) || []) if (!used.has(n) && !shared.south.has(n) && !shared.north.has(n)) return n; return null; };
+
+  // Each slot on a road can stand for several berths, so a train in any of them shows
   const tracks = [...plats.keys()].sort(platOrder).map((p) => {
     const x = plats.get(p);
     const berths = [];
-    const B = (k, col, kind) => { const [a, id] = k.split(':'); const b = { id, col, kind }; if (a !== area) b.area = a; berths.push(b); };
-    const put = (list, cols, kind) => list.slice(0, cols.length).forEach((k, i) => B(k, cols[i], kind));
+    const slot = (keys, col, kind) => {
+      if (!keys.length) return;
+      const [a, id] = keys[0].split(':');
+      const b = { id, col, kind };
+      if (a !== area) b.area = a;
+      if (keys.length > 1) b.keys = keys;
+      berths.push(b);
+    };
+    const halves = (list, cols) => { if (list.length <= 1) return slot(list, cols[0]); const h = Math.ceil(list.length / 2); slot(list.slice(0, h), cols[0]); slot(list.slice(h), cols[1]); };
     const so = outer(x.south), no = outer(x.north);
-    if (so) { used.add(so); B(so, 0, 'line'); }
-    put([...x.south].sort().reverse(), [2, 1], 'line');
-    put([...x.plat].sort(), [3, 4], 'platform');
-    put([...x.north].sort(), [5, 6], 'line');
-    if (no) { used.add(no); B(no, 7, 'line'); }
+    if (so) { used.add(so); slot([so], 0, 'line'); }
+    const south = [...x.south].sort().reverse(), north = [...x.north].sort(), plat = [...x.plat].sort();
+    if (south.length) { slot([south[0]], 2, 'line'); slot(south.slice(1), 1, 'line'); }
+    if (plat.length <= 1) slot(plat, 3, 'platform'); else { const h = Math.ceil(plat.length / 2); slot(plat.slice(0, h), 3, 'platform'); slot(plat.slice(h), 4, 'platform'); }
+    if (north.length) { slot([north[0]], 5, 'line'); slot(north.slice(1), 6, 'line'); }
+    if (no) { used.add(no); slot([no], 7, 'line'); }
+    for (const b of berths) if (!b.kind) b.kind = 'line';
     return { name: p, berths };
   }).filter((t) => t.berths.some((b) => b.kind === 'platform'));
 
+  // The fringe: every berth within a few steps of the station, with which end it is
+  // at and how many steps out. Lets the app list trains approaching and just gone.
+  const onPanel = new Set();
+  for (const t of tracks) for (const b of t.berths) for (const k of b.keys || [`${b.area || area}:${b.id}`]) onPanel.add(k);
+  const fringe = {};
+  const seed = (side, keys, d) => { for (const k of keys) if (!onPanel.has(k)) { if (!fringe[k] || fringe[k][1] > d) fringe[k] = [side, d]; } };
+  const southPanel = [], northPanel = [];
+  for (const t of tracks) for (const b of t.berths) { const ks = b.keys || [`${b.area || area}:${b.id}`]; if (b.col <= 2) southPanel.push(...ks); if (b.col >= 5) northPanel.push(...ks); }
+  seed(0, shared.south, 1); seed(1, shared.north, 1);
+  for (const [side, from] of [[0, southPanel], [1, northPanel]]) for (const k of from) for (const n of edges.get(k) || []) seed(side, [n], 1);
+  const MAX = 12;
+  for (let d = 1; d < MAX; d++) {
+    for (const [k, [side, dk]] of Object.entries(fringe)) {
+      if (dk !== d) continue;
+      for (const n of edges.get(k) || []) if (!onPanel.has(n) && (!fringe[n] || fringe[n][1] > d + 1)) fringe[n] = [side, d + 1];
+    }
+  }
+
   return {
-    id: cfg.id, name: cfg.name, subtitle: areas.length ? `TD area${areas.length > 1 ? 's' : ''} ${areas.join(' · ')}` : cfg.subtitle, area, areas, ends: cfg.ends, style: 'iecc', tracks,
-    source: { smartRows: all.length, stationRows: here.length, platforms: tracks.length, areas: count }
+    id: cfg.id, name: cfg.name, subtitle: areas.length ? `TD area${areas.length > 1 ? 's' : ''} ${areas.join(' · ')}` : cfg.subtitle, area, areas, ends: cfg.ends, crs: cfg.crs || null, style: 'iecc', tracks, fringe,
+    source: { smartRows: all.length, stationRows: here.length, platforms: tracks.length, areas: count, fringeBerths: Object.keys(fringe).length, sharedApproaches: shared.south.size + shared.north.size }
   };
 }
 
