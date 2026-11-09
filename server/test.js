@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { ROUTES } from '../app/layout.js';
-import { emptyState, buildView as realBuildView, signalState, fringeLists } from '../app/model.js';
+import { emptyState, buildView as realBuildView, signalState, laneTrains } from '../app/model.js';
 import { createNational, handleNational, linkPanelTrains } from './national.js';
 
 // A small panel in area VC for these tests (the app's own panel is York)
@@ -99,16 +99,16 @@ test('panel berth shows the delay of the real train: same headcode, near the sta
   assert.equal(realBuildView(raw, Date.now(), [panel]).panels[0].tracks[1].berths[1].delay, null);
 });
 
-test('fringe: trains stepping towards the station are approaching, away are just gone', () => {
+test('main-line tracks: trains listed on their own track, nearest the station first', () => {
   const raw = emptyState();
-  const fringe = { 'VC:0900': [0, 3], 'VC:0910': [0, 2], 'VC:0920': [0, 1], 'VC:0950': [1, 1], 'VC:0960': [1, 2] };
-  handleTd([{ CC_MSG: { area_id: 'VC', to: '0900', descr: '1A01', time: '1' } }, { CA_MSG: { area_id: 'VC', from: '0900', to: '0910', descr: '1A01', time: '1' } },
-    { CC_MSG: { area_id: 'VC', to: '0950', descr: '1B02', time: '1' } }, { CA_MSG: { area_id: 'VC', from: '0950', to: '0960', descr: '1B02', time: '1' } },
-    { CC_MSG: { area_id: 'VC', to: '0920', descr: '2C03', time: '1' } }], raw, areas);
-  const f = fringeLists(raw, fringe);
-  assert.deepEqual(f[0].approaching.map((t) => t.code), ['1A01']);
-  assert.deepEqual(f[1].leaving.map((t) => t.code), ['1B02']);
-  assert.deepEqual(f[0].unknown.map((t) => t.code), ['2C03'], 'not stepped yet: not guessed');
+  const lanes = [{ side: 0, dir: 'in', feeds: [0] }, { side: 1, dir: 'out', feeds: [1] }];
+  const laneOf = { 'VC:0900': [0, 3], 'VC:0910': [0, 1], 'VC:0950': [1, 2] };
+  handleTd([{ CC_MSG: { area_id: 'VC', to: '0900', descr: '1A01' } }, { CC_MSG: { area_id: 'VC', to: '0910', descr: '1A02' } },
+    { CC_MSG: { area_id: 'VC', to: '0950', descr: '1B02' } }, { CC_MSG: { area_id: 'VC', to: '0999', descr: '9Z99' } }], raw, areas);
+  const l = laneTrains(raw, lanes, laneOf);
+  assert.deepEqual(l[0].trains.map((t) => t.code), ['1A02', '1A01']);
+  assert.deepEqual(l[1].trains.map((t) => t.code), ['1B02']);
+  assert.equal(l[1].dir, 'out');
 });
 
 test('TRUST at route stations places the train and colours the section', () => {

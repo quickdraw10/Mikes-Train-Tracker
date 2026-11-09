@@ -103,7 +103,12 @@ test('York panel: one road per platform, approach berths on the correct side', (
   assert.equal(road5['0510'].kind, 'platform');
   assert.ok(road5['0500'].col <= 2 && road5['0501'].col <= 2, 'south approaches on the left');
   assert.ok(road5['0520'].col >= 5 && road5['0530'].col >= 5, 'north approaches on the right');
-  assert.equal(road5['0490'].col, 0, 'outer berth found from the stepping table');
+  // a berth further out is on a main-line track at the south (left) end, 1 step out, trains coming in
+  const [li, d] = p.laneOf['Y1:0490'];
+  assert.equal(d, 1);
+  assert.equal(p.lanes[li].side, 0);
+  assert.equal(p.lanes[li].dir, 'in');
+  assert.deepEqual(p.lanes[li].feeds, [0], 'it leads into road 5');
 });
 
 test('panel by STANOX: platforms split across two TD areas, berth numbers kept apart', () => {

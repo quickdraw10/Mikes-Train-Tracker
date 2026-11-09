@@ -60,12 +60,12 @@ export function buildView(raw, now = Date.now(), panelDefs = PANELS) {
       })
     }));
     late.sort((a, b) => (b.delay || 0) - (a.delay || 0));
-    const fringe = p.fringe ? fringeLists(raw, p.fringe) : null;
+    const lanes = p.lanes ? laneTrains(raw, p.lanes, p.laneOf) : null;
     // the most recent message from any of the panel's areas
     const heard = Math.max(0, ...(p.areas || [p.area]).map((a) => (raw.areaSeen && raw.areaSeen[a]) || 0)) || null;
     // Live only: an area that has sent nothing (not even a heartbeat) for 5 minutes is probably down
     const quietMins = raw.mode === 'live' ? (heard ? Math.floor((now - heard) / 60000) : null) : 0;
-    return { id: p.id, name: p.name, subtitle: p.subtitle, area: p.area, areas: p.areas || [p.area], ends: p.ends, style: p.style || null, note: p.note || null, crs: p.crs || null, tracks, late, quietMins, fringe };
+    return { id: p.id, name: p.name, subtitle: p.subtitle, area: p.area, areas: p.areas || [p.area], ends: p.ends, style: p.style || null, note: p.note || null, crs: p.crs || null, tracks, late, quietMins, lanes };
   });
 
   const routes = ROUTES.map((r) => {
@@ -100,27 +100,17 @@ export function buildView(raw, now = Date.now(), panelDefs = PANELS) {
   return { mode: raw.mode, updated: raw.updated || now, panels, routes };
 }
 
-// Trains on the main lines either side of a station panel, from the signalling berths:
-// approaching (each step brings it closer), just gone (each step takes it further away),
-// or not yet known (it hasn't stepped since we started watching). Nothing is estimated.
-export function fringeLists(raw, fringe) {
-  const sides = [0, 1].map(() => ({ approaching: [], leaving: [], unknown: [] }));
+// Trains on the main-line tracks either side of a station panel, straight from the
+// signalling berths. Each track's direction (into or away from the station) comes from
+// Network Rail's berth stepping data, so nothing is estimated. Nearest the station first.
+export function laneTrains(raw, lanes, laneOf) {
+  const out = lanes.map((l) => ({ side: l.side, dir: l.dir, feeds: l.feeds, trains: [] }));
   for (const [k, code] of Object.entries(raw.berths)) {
-    const f = fringe[k];
-    if (!f || !code) continue;
-    const [side, dist] = f;
-    const area = k.split(':')[0];
-    const st = raw.steps && raw.steps[area + ':' + code];
-    let how = 'unknown';
-    if (st && st.to === k) {
-      const from = fringe[st.from];
-      if (!from) how = 'leaving';                  // stepped out from the station
-      else if (from[0] === side && from[1] > dist) how = 'approaching';
-      else if (from[0] === side && from[1] < dist) how = 'leaving';
-    }
+    const at = laneOf[k];
+    if (!at || !code) continue;
     const tr = raw.trains[code];
-    sides[side][how].push({ code, dist, natId: tr ? tr.natId || null : null, delay: tr ? tr.delay : null, cancelled: !!(tr && tr.cancelled), band: band(tr) });
+    out[at[0]].trains.push({ code, dist: at[1], natId: tr ? tr.natId || null : null, delay: tr ? tr.delay : null, cancelled: !!(tr && tr.cancelled), band: band(tr) });
   }
-  for (const s of sides) for (const l of Object.values(s)) l.sort((a, b) => a.dist - b.dist);
-  return sides;
+  for (const l of out) l.trains.sort((a, b) => a.dist - b.dist);
+  return out;
 }

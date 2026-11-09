@@ -95,33 +95,82 @@ function renderPanel() {
   }
 
   const n = p.tracks.length;
-  const H = TOP + n * ROWH + 44;
+  const lanes = p.lanes && p.lanes.length ? p.lanes : null;
+  // With real main-line tracks the roads sit in the middle (columns 1-6) and the
+  // main lines take the edges; without them (demo) the roads use the full width.
+  const cw = lanes ? 32 : COLW, bw = lanes ? 30 : 34;
+  const cx = lanes ? (c) => 120 + (c - 1) * cw : colX;
   const rowY = (i) => TOP + i * ROWH + ROWH / 2;
-  const L = 6, R = SVGW - 6, lx = colX(0) - COLW / 2 - 4, rx = colX(7) + COLW / 2 + 4;
+  const L = 6, R = SVGW - 6;
+  // main-line track heights: next to the roads they lead into, never overlapping
+  const laneY = new Map();
+  let H = TOP + n * ROWH + 44;
+  if (lanes) {
+    for (const side of [0, 1]) {
+      // centred on the roads it serves, on the gap between two roads so it reads as its own track
+      const gapY = (y) => TOP + Math.max(0, Math.round((y - TOP) / ROWH)) * ROWH;
+      const mine = lanes.map((l, i) => ({ l, i, want: gapY(l.feeds.length ? l.feeds.reduce((a, f) => a + rowY(f), 0) / l.feeds.length : rowY(0)) })).filter((x) => x.l.side === side).sort((a, b) => a.want - b.want);
+      let y = TOP - 24;
+      for (const x of mine) { y = Math.max(x.want, y + 24); laneY.set(x.i, y); }
+      H = Math.max(H, y + 44);
+    }
+  }
   let g = '';
 
-  // throats: each road fans into the main lines at both ends
-  const mains = 4;
-  const mainY = (k) => TOP + (n * ROWH) * (k + 0.5) / mains;
+  // roads
   p.tracks.forEach((t, i) => {
-    const k = Math.min(mains - 1, Math.floor(i * mains / n));
     const minCol = Math.min(...t.berths.map((b) => b.col)), maxCol = Math.max(...t.berths.map((b) => b.col));
-    const start = colX(minCol) - COLW / 2, end = colX(maxCol) + COLW / 2;
-    if (minCol === 0) g += `<path d="M${L + 12} ${mainY(k)} L${lx} ${rowY(i)}" class="tk"/>`;
-    if (maxCol === 7) g += `<path d="M${rx} ${rowY(i)} L${R - 12} ${mainY(k)}" class="tk"/>`;
+    const start = cx(minCol) - cw / 2, end = cx(maxCol) + cw / 2;
     g += `<line x1="${start}" y1="${rowY(i)}" x2="${end}" y2="${rowY(i)}" class="tk"/>`;
-    if (minCol > 0) g += `<line x1="${start}" y1="${rowY(i) - 5}" x2="${start}" y2="${rowY(i) + 5}" class="tk"/>`;
-    if (maxCol < 7) g += `<line x1="${end}" y1="${rowY(i) - 5}" x2="${end}" y2="${rowY(i) + 5}" class="tk"/>`;
+    if (lanes || minCol > 0) g += `<line x1="${start}" y1="${rowY(i) - 5}" x2="${start}" y2="${rowY(i) + 5}" class="tk"/>`;
+    if (lanes || maxCol < 7) g += `<line x1="${end}" y1="${rowY(i) - 5}" x2="${end}" y2="${rowY(i) + 5}" class="tk"/>`;
   });
-  for (let k = 0; k < mains; k++) {
-    g += `<line x1="${L}" y1="${mainY(k)}" x2="${L + 12}" y2="${mainY(k)}" class="tk"/><line x1="${R - 12}" y1="${mainY(k)}" x2="${R}" y2="${mainY(k)}" class="tk"/>`;
+
+  if (lanes) {
+    // main-line tracks and the real connections into the roads they serve
+    lanes.forEach((l, li) => {
+      const y = laneY.get(li);
+      const inner = l.side === 0 ? 100 : 300, outer = l.side === 0 ? L : R;
+      for (const f of l.feeds) {
+        const t = p.tracks[f];
+        if (!t) continue;
+        const cols = t.berths.map((b) => b.col);
+        const rx = l.side === 0 ? cx(Math.min(...cols)) - cw / 2 : cx(Math.max(...cols)) + cw / 2;
+        g += `<path d="M${inner} ${y} L${rx} ${rowY(f)}" class="tk thin"/>`;
+      }
+      g += `<line x1="${outer}" y1="${y}" x2="${inner}" y2="${y}" class="tk"/>`;
+      // which way trains run on it: towards the station, or away
+      const toStation = l.dir === 'in';
+      const ax = l.side === 0 ? outer + 2 : outer - 2;
+      g += `<text x="${ax}" y="${y - 5}" class="lbl small" text-anchor="${l.side === 0 ? 'start' : 'end'}">${(l.side === 0) === toStation ? '▶' : '◀'}</text>`;
+      const slots = l.side === 0 ? [84, 52, 20] : [316, 348, 380];
+      const shown = l.trains.length > 3 ? l.trains.slice(0, 2) : l.trains.slice(0, 3);
+      shown.forEach((tr, k) => {
+        const x = slots[k];
+        g += `<line x1="${x - 15}" y1="${y}" x2="${x + 15}" y2="${y}" class="i-occglow"/><line x1="${x - 15}" y1="${y}" x2="${x + 15}" y2="${y}" class="i-occ"/>`;
+        g += `<g class="hcbox b-${tr.band}" data-train="${esc(tr.code)}" tabindex="0" role="button" aria-label="${esc(tr.code)} ${toStation ? 'approaching' : 'just left'}, ${tr.dist} sections out, ${esc(lateText(tr.delay, tr.cancelled))}">
+          <rect x="${x - bw / 2}" y="${y - 7.5}" width="${bw}" height="15" rx="1.5"/><text x="${x}" y="${y + 3.6}" text-anchor="middle">${esc(tr.code)}</text></g>`;
+      });
+      if (l.trains.length > 3) g += `<text x="${slots[2]}" y="${y + 3.6}" class="lbl small" text-anchor="middle">+${l.trains.length - 2}</text>`;
+    });
+  } else {
+    // demo layout: each road fans into the main lines at both ends
+    const lx = colX(0) - COLW / 2 - 4, rx = colX(7) + COLW / 2 + 4, mains = 4;
+    const mainY = (k) => TOP + (n * ROWH) * (k + 0.5) / mains;
+    p.tracks.forEach((t, i) => {
+      const k = Math.min(mains - 1, Math.floor(i * mains / n));
+      const minCol = Math.min(...t.berths.map((b) => b.col)), maxCol = Math.max(...t.berths.map((b) => b.col));
+      if (minCol === 0) g += `<path d="M${L + 12} ${mainY(k)} L${lx} ${rowY(i)}" class="tk"/>`;
+      if (maxCol === 7) g += `<path d="M${rx} ${rowY(i)} L${R - 12} ${mainY(k)}" class="tk"/>`;
+    });
+    for (let k = 0; k < mains; k++) g += `<line x1="${L}" y1="${mainY(k)}" x2="${L + 12}" y2="${mainY(k)}" class="tk"/><line x1="${R - 12}" y1="${mainY(k)}" x2="${R}" y2="${mainY(k)}" class="tk"/>`;
   }
 
   // platforms
   p.tracks.forEach((t, i) => {
     const pc = t.berths.filter((b) => b.kind === 'platform').map((b) => b.col);
     if (!pc.length) return;
-    const x1 = colX(Math.min(...pc)) - COLW / 2 + 2, x2 = colX(Math.max(...pc)) + COLW / 2 - 2;
+    const x1 = cx(Math.min(...pc)) - cw / 2 + 2, x2 = cx(Math.max(...pc)) + cw / 2 - 2;
     g += `<rect x="${x1}" y="${rowY(i) + 9}" width="${x2 - x1}" height="4" class="i-plat"/>`;
     g += `<text x="${(x1 + x2) / 2}" y="${rowY(i) + 13}" class="pnum" text-anchor="middle" dy="0.1em">${esc(t.name)}</text>`;
   });
@@ -130,16 +179,16 @@ function renderPanel() {
   p.tracks.forEach((t, i) => {
     const y = rowY(i);
     for (const b of t.berths) {
-      const cx = colX(b.col);
-      if (b.code) g += `<line x1="${cx - COLW / 2 + 2}" y1="${y}" x2="${cx + COLW / 2 - 2}" y2="${y}" class="i-occglow"/><line x1="${cx - COLW / 2 + 2}" y1="${y}" x2="${cx + COLW / 2 - 2}" y2="${y}" class="i-occ"/>`;
-      const sx = b.col <= 3 ? cx + COLW / 2 - 2 : cx - COLW / 2 + 2;
+      const x = cx(b.col);
+      if (b.code) g += `<line x1="${x - cw / 2 + 2}" y1="${y}" x2="${x + cw / 2 - 2}" y2="${y}" class="i-occglow"/><line x1="${x - cw / 2 + 2}" y1="${y}" x2="${x + cw / 2 - 2}" y2="${y}" class="i-occ"/>`;
+      const sx = b.col <= 3 ? x + cw / 2 - 2 : x - cw / 2 + 2;
       const cls = b.signal === 'on' ? 'on' : b.signal === 'off' ? 'off' : 'unk';
       g += `<line x1="${sx}" y1="${y - 2}" x2="${sx}" y2="${y - 8}" class="stem"/><circle cx="${sx}" cy="${y - 10.5}" r="2.8" class="sg ${cls}"><title>Signal ${esc(p.area + b.id)}</title></circle>`;
       if (b.code) {
         g += `<g class="hcbox b-${b.band}" data-train="${esc(b.code)}" tabindex="0" role="button" aria-label="${esc(b.code)} at platform road ${esc(t.name)}, ${esc(lateText(b.delay))}">
-          <rect x="${cx - 17}" y="${y - 7.5}" width="34" height="15" rx="1.5"/><text x="${cx}" y="${y + 3.6}" text-anchor="middle">${esc(b.code)}</text></g>`;
+          <rect x="${x - bw / 2}" y="${y - 7.5}" width="${bw}" height="15" rx="1.5"/><text x="${x}" y="${y + 3.6}" text-anchor="middle">${esc(b.code)}</text></g>`;
       } else {
-        g += `<rect x="${cx - 17}" y="${y - 7.5}" width="34" height="15" rx="1.5" class="berth-empty"><title>Berth ${esc(b.id)}</title></rect>`;
+        g += `<rect x="${x - bw / 2}" y="${y - 7.5}" width="${bw}" height="15" rx="1.5" class="berth-empty"><title>Berth ${esc(b.id)}</title></rect>`;
       }
     }
   });
@@ -156,23 +205,9 @@ function renderPanel() {
 
   return `${head}
     <div class="iecc-wrap"><svg class="iecc" viewBox="0 0 ${SVGW} ${H}" role="img" aria-label="Signal panel for ${esc(p.name)}">${g}</svg></div>
-    <p class="note">Tap a headcode for that train. Pinch to zoom in.</p>
-    ${fringeHTML(p)}
+    <p class="note">Tap a headcode for that train. ${p.lanes && p.lanes.length ? 'The main lines at each edge show trains coming in (arrow towards the station) and just gone (arrow away), nearest the station first. ' : ''}Pinch to zoom in.</p>
     ${legend()}
     <section class="list"><div class="list-h">Late on this panel</div>${late}</section>`;
-}
-
-// Main lines either side: trains approaching and just gone, from the signalling berths
-function fringeHTML(p) {
-  if (!p.fringe) return '';
-  const box = (t) => `<button class="fr-train" data-train="${esc(t.code)}"><span class="hcbox-s b-${t.band}">${esc(t.code)}</span><small>${t.dist} ${t.dist === 1 ? 'section' : 'sections'}${t.delay != null || t.cancelled ? ' · ' + esc(shortLate(t.delay, t.cancelled)) : ''}</small></button>`;
-  const group = (label, list) => list.length ? `<div class="fr-row"><span class="fr-lbl">${label}</span><div class="fr-list">${list.slice(0, 8).map(box).join('')}</div></div>` : '';
-  const side = (i) => {
-    const f = p.fringe[i];
-    const body = group('Approaching', f.approaching) + group('Just gone', f.leaving) + group('Direction not seen yet', f.unknown);
-    return `<div class="fringe"><div class="fr-head">${i === 0 ? '◀ ' + esc(p.ends[0]) : esc(p.ends[1]) + ' ▶'}</div>${body || '<div class="fr-empty">No trains on the main lines this side</div>'}</div>`;
-  };
-  return `<section class="fringes" aria-label="Trains on the main lines either side">${side(0)}${side(1)}</section>`;
 }
 
 function legend() {
@@ -357,7 +392,7 @@ function openSheet(code) {
   // A panel headcode linked to a real train (same headcode, near this station) opens the full train screen
   const p = ui.view.panels[ui.panel];
   if (p && ui.tab === 'panel') {
-    const all = [...p.tracks.flatMap((t) => t.berths), ...p.late, ...(p.fringe || []).flatMap((f) => [...f.approaching, ...f.leaving, ...f.unknown])];
+    const all = [...p.tracks.flatMap((t) => t.berths), ...p.late, ...(p.lanes || []).flatMap((l) => l.trains)];
     const hit = all.find((b) => b.code === code && b.natId);
     if (hit) return trainSheet({ id: hit.natId, code, delay: hit.delay, cancelled: hit.cancelled });
   }
