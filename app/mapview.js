@@ -66,6 +66,13 @@ async function loadTrains() {
 
 let lastRes = null;
 function drawTrains(res) {
+  if (res && res.error) {
+    // Never leave old positions up as if they were current
+    lastRes = null;
+    trainLayer.clearLayers();
+    document.getElementById('map-count').innerHTML = `<span class="pill wait c-bad">${res.offline ? 'Offline' : 'No data'}</span> ${esc(res.error)}`;
+    return;
+  }
   lastRes = res;
   trainLayer.clearLayers();
   const z = map.getZoom();

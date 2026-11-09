@@ -33,7 +33,6 @@ export const LINES = [
 ];
 const LABELS = { KGX: 'London', EDB: 'Edinburgh', GLC: 'Glasgow', ABD: 'Aberdeen', NCL: 'Newcastle', YRK: 'York', LDS: 'Leeds', MAN: 'Manchester', LIV: 'Liverpool', SHF: 'Sheffield', DON: 'Doncaster', CRE: 'Crewe', BHM: 'Birmingham', PBO: 'Peterborough', DBY: 'Derby', LEI: 'Leicester', BRI: 'Bristol', CDF: 'Cardiff', SWA: 'Swansea', RDG: 'Reading', NRW: 'Norwich', SOU: 'Southampton', BTN: 'Brighton', AFK: 'Ashford', CAR: 'Carlisle', PRE: 'Preston', SCA: 'Scarborough', DEE: 'Dundee', BMH: 'Bournemouth' };
 const LEFT_LABEL = new Set(['LIV', 'GLC', 'PRE', 'CAR', 'CRE', 'BRI', 'CDF', 'SWA', 'BMH', 'SOU', 'BHM', 'RDG']);
-const MEMORY_MS = 20 * 60 * 1000;
 
 // Map tiles that cover the lines, each fetched once
 function tiles() {
@@ -59,7 +58,9 @@ async function refresh() {
   try {
     const res = await Promise.all(TILES.map((b) => api.trains(b, 1500).catch(() => null)));
     const seen = new Map();
+    state.error = null;
     for (const r of res) if (r && r.trains) { state.mode = r.mode; for (const t of r.trains) seen.set(t.id, t); }
+    if (!seen.size && res.some((r) => r && r.error)) { state.error = res.find((r) => r && r.error).error; state.segs = null; state.memory.clear(); return; }
     if (!seen.size && !state.mode) return;
     const now = Date.now();
     const segs = {};
@@ -71,8 +72,8 @@ async function refresh() {
         const timed = inside.filter((t) => t.delay != null);
         const key = l.id + ':' + i;
         let avg = null;
-        if (timed.length) { avg = Math.round(timed.reduce((s, t) => s + Math.max(0, t.delay), 0) / timed.length); state.memory.set(key, { avg, at: now }); }
-        else { const h = state.memory.get(key); if (h && now - h.at < MEMORY_MS) avg = h.avg; }
+        // Only trains on the stretch now: an empty stretch shows as grey, not its last colour
+        if (timed.length) avg = Math.round(timed.reduce((s, t) => s + Math.max(0, t.delay), 0) / timed.length);
         const late = inside.filter((t) => t.cancelled || t.delay >= 2).length;
         segs[key] = { avg, band: avg == null ? 'none' : band({ delay: avg }), trains: inside, late, worst: Math.max(0, ...timed.map((t) => t.delay)) };
       }
@@ -143,9 +144,9 @@ function render() {
   const all = state.segs ? Object.values(state.segs) : [];
   const total = new Set(all.flatMap((s) => s.trains.map((t) => t.id))).size;
   const late = new Set(all.flatMap((s) => s.trains.filter((t) => t.cancelled || t.delay >= 2).map((t) => t.id))).size;
-  const pill = state.mode ? `<span class="pill ${state.mode === 'live' ? 'live' : 'demo'}">${state.mode === 'live' ? 'Live' : 'Demo'}</span>` : '<span class="pill wait">Loading</span>';
+  const pill = state.error ? '<span class="pill wait c-bad">Offline</span>' : state.mode ? `<span class="pill ${state.mode === 'live' ? 'live' : 'demo'}">${state.mode === 'live' ? 'Live' : 'Demo'}</span>` : '<span class="pill wait">Loading</span>';
   el.innerHTML = `<header class="head"><h1>Network</h1><div class="sub">Main lines, lit by how late trains are running</div>
-      <div class="sub">${pill}<span>${state.segs ? `${total} trains on these lines · <span class="c-mid">${late} late</span>` : 'Finding trains…'}</span></div></header>
+      <div class="sub">${pill}<span>${state.error ? esc(state.error) : state.segs ? `${total} trains on these lines · <span class="c-mid">${late} late</span>` : 'Finding trains…'}</span></div></header>
     <div class="iecc-wrap">${svg()}</div>
     <p class="note">Each stretch shows the average delay of the trains on it. Tap a stretch for its trains, or a station for its board.</p>
     <div class="legend"><span><i class="b-ok"></i>On time</span><span><i class="b-mid"></i>2–9 late</span><span><i class="b-bad"></i>10+ late</span><span><i class="b-none"></i>No trains</span></div>

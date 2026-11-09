@@ -6,14 +6,19 @@ import { createNationalSim } from './national-sim.js';
 
 let base = null;
 let sim = null;
+let mode = null; // 'server' | 'demo' | 'offline'
 let decide;
 const ready = new Promise((r) => { decide = r; });
+const set = (m) => { mode = m; decide(m); };
 
-export function useServer(apiBase) { base = apiBase; decide('server'); }
+export function useServer(apiBase) { base = apiBase; set('server'); }
 export function useDemo() {
   if (!sim) { sim = createNationalSim(); setInterval(() => sim.tick(), 10000); }
-  decide('demo');
+  set('demo');
 }
+// The live service can't be reached: say so, never show invented trains instead
+export function useOffline(apiBase) { base = apiBase; set('offline'); }
+export const OFFLINE = { error: 'Can\'t reach the live data right now. It will reconnect automatically.', offline: true };
 
 async function get(path) {
   const res = await fetch(base + path, { cache: 'no-store' });
@@ -23,25 +28,29 @@ async function get(path) {
 }
 
 export async function trains(box, max) {
-  const how = await ready;
-  if (how === 'demo') return sim.trains(box);
+  await ready;
+  if (mode === 'offline') return { ...OFFLINE };
+  if (mode === 'demo') return sim.trains(box);
   return get(`/api/trains?w=${box.w}&s=${box.s}&e=${box.e}&n=${box.n}${max ? '&max=' + max : ''}`);
 }
 
 export async function board(crs, type) {
-  const how = await ready;
-  if (how === 'demo') return sim.board(crs, type);
+  await ready;
+  if (mode === 'offline') return { ...OFFLINE };
+  if (mode === 'demo') return sim.board(crs, type);
   return get(`/api/board/${encodeURIComponent(crs)}?type=${type}`);
 }
 
 export async function moves(lat, lon, km = 15) {
-  const how = await ready;
-  if (how === 'demo') return sim.moves(lat, lon, km);
+  await ready;
+  if (mode === 'offline') return { ...OFFLINE };
+  if (mode === 'demo') return sim.moves(lat, lon, km);
   return get(`/api/moves?lat=${lat}&lon=${lon}&km=${km}`);
 }
 
 export async function train(id) {
-  const how = await ready;
-  if (how === 'demo') return sim.train(id);
+  await ready;
+  if (mode === 'offline') return { ...OFFLINE };
+  if (mode === 'demo') return sim.train(id);
   return get(`/api/train/${encodeURIComponent(id)}`);
 }

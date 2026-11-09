@@ -117,10 +117,10 @@ on its own, but not the service. When the app is hosted somewhere other than the
   area sends this data, and some send only part of it.
 - TRUST has a short planned outage most Sundays around 02:00–02:15; missed messages arrive after.
 
-- On the map, trains are placed at the last station that reported them and then moved towards
-  the next reporting point using the feed's own running-time estimate. Junctions and other
-  non-station timing points have no map position, so a train can sit at its last station until the
-  next station report.
+- Everything shown is reported data; nothing is estimated. On the map a train sits at the last
+  station that reported it until the next station report (junctions and other non-station timing
+  points have no map position). Signal aspects are not inferred. On the Route and Network tabs a
+  train only appears once the feed has shown which way it's heading.
 - The map shows up to 600 trains at once (the most delayed first); zoom in to see every train in an area.
 
 ## Credits

@@ -5,7 +5,8 @@
 // on the route by projecting its map position onto the line between the
 // route's stations; a train more than a few km off the line is left out.
 // Direction comes from the train's next (or last) reporting station, or from
-// how it moved since the previous update.
+// the change between two of its reported positions. A train whose direction
+// hasn't been reported yet is left off rather than guessed.
 
 import * as api from './api.js';
 import { BY_CRS, km, searchStations } from './geo.js';
@@ -100,7 +101,9 @@ export function place(route, trains, prev = new Map()) {
     else if (idx.has(t.lastCrs) && Math.abs(idx.get(t.lastCrs) - pos) > 0.02) dir = idx.get(t.lastCrs) < pos ? 'down' : 'up';
     else if (prev.has(t.id) && Math.abs(prev.get(t.id).pos - pos) > 0.01) dir = pos > prev.get(t.id).pos ? 'down' : 'up';
     else if (prev.has(t.id)) dir = prev.get(t.id).dir;
-    out.push({ id: t.id, code: t.code, toc: t.toc, dest: t.dest, delay: t.delay, cancelled: !!t.cancelled, band: band(t), pos, dir: dir || 'down', guessed: !dir, last: t.last });
+    // Only trains whose direction the feed has shown us: no guessing
+    if (!dir) continue;
+    out.push({ id: t.id, code: t.code, toc: t.toc, dest: t.dest, delay: t.delay, cancelled: !!t.cancelled, band: band(t), pos, dir, last: t.last });
   }
   return out;
 }
@@ -130,7 +133,7 @@ export async function refresh(route) {
     const seen = new Map();
     let mode = null;
     for (const r of res) if (r && r.trains) { mode = r.mode; for (const t of r.trains) seen.set(t.id, t); }
-    if (!mode) return null;
+    if (!mode) { const err = res.find((r) => r && r.error); return err ? { id: route.id, error: err.error } : null; }
     state.trains = place(route, [...seen.values()], state.prev);
     state.prev = new Map(state.trains.map((t) => [t.id, { pos: t.pos, dir: t.dir }]));
     state.mode = mode;

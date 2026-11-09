@@ -20,13 +20,13 @@ test('a train reporting at a station appears on the map there, with its delay', 
   assert.equal(r.trains[0].band, 'mid');
 });
 
-test('after departing it moves towards the next reporting point', () => {
+test('after departing it stays at the last reported station: nothing is estimated', () => {
   const nat = createNational();
   const now = Date.now();
   handleNational([{ header: { msg_type: '0003' }, body: { train_id: '181D42MW08', loc_stanox: '18001', event_type: 'DEPARTURE', next_report_stanox: '18002', next_report_run_time: '4', timetable_variation: '0', variation_status: 'ON TIME' } }], nat, stanoxCrs, now);
   const t = nat.trains.get('181D42MW08');
   const p = positionOf(t, now + 2 * 60000);
-  assert.ok(p.lon < t.at.lon && p.lon > t.next.lon, 'between Nottingham and Beeston');
+  assert.deepEqual(p, { lat: t.at.lat, lon: t.at.lon }, 'still shown at Nottingham until Beeston reports it');
 });
 
 test('timing points that are not stations update delay but not position', () => {

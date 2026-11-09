@@ -1,7 +1,6 @@
 // Every train in the country, from the movements (TRUST) feed, for the map.
-// A train is placed at the last station it reported from. Once it has departed
-// it is moved along towards its next reporting point using the feed's own
-// running-time estimate, so it creeps along the line between reports.
+// A train is placed at the last station it reported from, and stays there until
+// the feed reports it somewhere else. Nothing is estimated between reports.
 // Timing points that are not stations (junctions, sidings) have no map position:
 // the train keeps its last station position but its delay still updates.
 
@@ -99,9 +98,7 @@ export function handleNational(batch, nat, stanoxCrs, now = Date.now()) {
 
 export function positionOf(t, now = Date.now()) {
   if (!t.at) return null;
-  if (!t.next || !t.runMins) return { lat: t.at.lat, lon: t.at.lon };
-  const f = Math.max(0, Math.min(0.9, (now - t.eventAt) / (t.runMins * 60000)));
-  return { lat: t.at.lat + (t.next.lat - t.at.lat) * f, lon: t.at.lon + (t.next.lon - t.at.lon) * f };
+  return { lat: t.at.lat, lon: t.at.lon };
 }
 
 export function trainsIn(nat, box, now = Date.now(), max = 600) {

@@ -38,11 +38,15 @@ function startDemo() {
   setInterval(() => { sim.tick(); update(); }, 4000);
 }
 
+// With a live service configured the app only ever shows real data: if the
+// service can't be reached it says so and keeps trying, rather than showing
+// demo trains. Demo trains are only for a copy of the app with no service.
 function connect() {
   if (API_BASE === null || typeof EventSource === 'undefined') return startDemo();
   let got = false;
   const es = new EventSource(API_BASE + '/api/stream');
-  const giveUp = setTimeout(() => { if (!got) { es.close(); startDemo(); } }, 4000);
+  const offline = () => { if (ui.source === 'server' || ui.source === 'offline') return; ui.source = 'offline'; api.useOffline(API_BASE); render(); };
+  const giveUp = setTimeout(() => { if (!got) offline(); }, 8000);
   es.onmessage = (e) => {
     got = true;
     clearTimeout(giveUp);
@@ -51,7 +55,8 @@ function connect() {
     ui.view = JSON.parse(e.data);
     render();
   };
-  es.onerror = () => { if (!got) { clearTimeout(giveUp); es.close(); startDemo(); } };
+  // EventSource reconnects by itself; until it does, say the live data is unavailable
+  es.onerror = () => { if (!got) { clearTimeout(giveUp); offline(); } };
 }
 
 // ---------- shared bits ----------
@@ -189,10 +194,11 @@ function useRoute(r) {
 
 function renderRoute() {
   const r = route.currentRoute();
-  const d = routeData && routeData.id === r.id ? routeData : null;
+  const d = routeData && routeData.id === r.id && !routeData.error ? routeData : null;
   const first = esc(BY_CRS.get(r.crs[0]).name), last = esc(BY_CRS.get(r.crs[r.crs.length - 1]).name);
   const head = `<header class="head route-head"><div class="rh-top"><h1>${esc(r.name)}</h1><button class="change" data-act-route="pick">Change</button></div>
     <div class="sub">${r.crs.length} stations · ${route.routeKm(r)} km${d ? ' · ' + (d.mode === 'live' ? '<span class="pill live">Live</span>' : '<span class="pill demo">Demo</span>') + ' ' + hhmm(d.updated) : ''}</div></header>`;
+  if (routeData && routeData.error && routeData.id === r.id) return head + `<div class="empty">${esc(routeData.error)}</div>`;
   if (!d) return head + `<div class="empty">Finding trains on this route…</div>`;
 
   // Each section is tall enough for the trains in it, so busy stretches open up
@@ -333,7 +339,11 @@ function render() {
   document.getElementById('infoview').hidden = ui.tab !== 'info';
   $view.hidden = ui.tab !== 'panel' && ui.tab !== 'route';
   if ($view.hidden) return;
-  if (!ui.view) { $view.innerHTML = `<header class="head"><h1>Train Tracker</h1><div class="sub"><span class="pill wait">Connecting…</span></div></header>`; return; }
+  if (!ui.view) {
+    const msg = ui.source === 'offline' ? '<span class="pill wait c-bad">Offline</span><span>Can\'t reach the live data. Retrying automatically.</span>' : '<span class="pill wait">Connecting…</span>';
+    $view.innerHTML = `<header class="head"><h1>Train Tracker</h1><div class="sub">${msg}</div></header>`;
+    return;
+  }
   $view.innerHTML = ui.tab === 'panel' ? renderPanel() : renderRoute();
   if (ui.selected) renderSheet();
 }
