@@ -340,3 +340,16 @@ button.sname { border: 0; padding: 0; background: none; color: var(--text); text
 .nw .nw-lbl { fill: #B98CFF; font: 700 7.5px var(--mono); letter-spacing: 0.06em; cursor: pointer; }
 .rh-btns { display: flex; gap: 8px; flex: none; }
 .change.flip { width: 36px; padding: 0; font-size: 18px; }
+
+/* Route: tappable summary and the swap button over the two lines */
+button.summary { width: calc(100% - 40px); border: 0; font: inherit; text-align: left; cursor: pointer; }
+.summary .sum-text { flex: 1; min-width: 0; }
+.summary .sum-chev { color: var(--trim); font-size: 28px; line-height: 1; font-weight: 300; }
+.cols { align-items: center; }
+.cols .updn { width: 58px; display: flex; justify-content: flex-start; }
+.cols .flip { width: 46px; height: 32px; border: 0; border-radius: 16px; background: var(--navy); color: #FFFFFF; font-size: 17px; box-shadow: inset 0 0 0 1.5px var(--trim); cursor: pointer; }
+
+/* Tab bar: the current tab sits in a pill, like the panel chips */
+.tab { margin: 0 3px; border-radius: 14px; padding: 4px 0; }
+.tab[aria-current="page"] { background: var(--navy); color: #FFFFFF; box-shadow: inset 0 0 0 1.5px var(--trim); }
+.sheet-card > .close, .sheet-card > .sheet-actions, .sheet-card > .st-head, .sheet-card > .segctl { flex: none; }

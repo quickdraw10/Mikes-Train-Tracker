@@ -22,6 +22,7 @@ export const PRESETS = [
   preset('ecml', 'East Coast Main Line', 'KGX SVG PBO GRA NNG RET DON YRK DAR DHM NCL BWK EDB'),
   preset('wcml', 'West Coast Main Line', 'EUS WFJ MKC RUG NUN TAM LTV STA CRE WBQ WGN PRE LAN OXN PNR CAR GLC'),
   preset('mml', 'Midland Main Line', 'STP LUT BDM WEL KET MHR LEI LBO EMD DBY CHD SHF'),
+  preset('mml-not', 'Midland Main Line – Nottingham', 'STP LUT BDM WEL KET MHR LEI LBO EMD BEE NOT'),
   preset('gwml', 'Great Western Main Line', 'PAD RDG DID SWI CPM BTH BRI'),
   preset('bml', 'Brighton Main Line', 'VIC CLJ ECR GTW HHE BTN'),
   preset('yrk-lds', 'York – Leeds', 'YRK ULL CHF MIK GRF CRG LDS'),

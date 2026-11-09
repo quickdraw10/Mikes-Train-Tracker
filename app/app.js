@@ -6,7 +6,7 @@ import { API_BASE } from './config.js';
 import { buildView, band } from './model.js';
 import { createSim } from './sim.js';
 import * as api from './api.js';
-import { closeCustomSheet, openSheet as openCustom, toast } from './ui.js';
+import { closeCustomSheet, openSheet as openCustom, toast, bandOf } from './ui.js';
 import { showMap, trainSheet, stationSheet } from './mapview.js';
 import * as route from './route.js';
 import { BY_CRS, searchStations } from './geo.js';
@@ -196,7 +196,7 @@ function renderRoute() {
   const r = route.currentRoute();
   const d = routeData && routeData.id === r.id && !routeData.error ? routeData : null;
   const first = esc(BY_CRS.get(r.crs[0]).name), last = esc(BY_CRS.get(r.crs[r.crs.length - 1]).name);
-  const head = `<header class="head route-head"><div class="rh-top"><h1>${esc(r.name)}</h1><div class="rh-btns"><button class="change flip" data-act-route="flip" aria-label="Swap top and bottom: put ${last} at the top">⇅</button><button class="change" data-act-route="pick">Change</button></div></div>
+  const head = `<header class="head route-head"><div class="rh-top"><h1>${esc(r.name)}</h1><div class="rh-btns"><button class="change" data-act-route="pick">Change</button></div></div>
     <div class="sub">${r.crs.length} stations · ${route.routeKm(r)} km${d ? ' · ' + (d.mode === 'live' ? '<span class="pill live">Live</span>' : '<span class="pill demo">Demo</span>') + ' ' + hhmm(d.updated) : ''}</div></header>`;
   if (routeData && routeData.error && routeData.id === r.id) return head + `<div class="empty">${esc(routeData.error)}</div>`;
   if (!d) return head + `<div class="empty">Finding trains on this route…</div>`;
@@ -208,22 +208,29 @@ function renderRoute() {
   const ys = [12];
   for (let i = 0; i < n - 1; i++) ys.push(ys[i] + gaps[i]);
   const yAt = (pos) => { const i = Math.min(n - 2, Math.floor(pos)); return ys[i] + (pos - i) * gaps[i]; };
-  const xD = 14, xU = 42;
+  // Railway convention: Up is towards London, drawn on the left; Down on the right.
+  // Internally 'down' means towards the bottom of the screen (the end of the station list).
+  const LON = BY_CRS.get('CHX') || { lat: 51.5074, lon: -0.1278 };
+  const dist = (c) => { const p = BY_CRS.get(c); return Math.hypot(p.lat - LON.lat, (p.lon - LON.lon) * 0.62); };
+  const upIsToTop = dist(r.crs[0]) <= dist(r.crs[n - 1]);
+  const railUp = upIsToTop ? 'up' : 'down';           // which internal direction is the railway's Up
+  const xOf = (dir) => (dir === railUp ? 14 : 42);    // Up line left, Down line right
+  const upEnd = upIsToTop ? first : last, downEnd = upIsToTop ? last : first;
   let html = '';
   for (const dir of ['down', 'up']) {
     d.sections[dir].forEach((s, i) => {
-      html += `<div class="seg b-${s.band}" style="left:${dir === 'down' ? xD : xU}px;top:${ys[i] + 6}px;height:${gaps[i]}px"></div>`;
+      html += `<div class="seg b-${s.band}" style="left:${xOf(dir)}px;top:${ys[i] + 6}px;height:${gaps[i]}px"></div>`;
     });
   }
   d.stations.forEach((name, i) => {
     const y = ys[i];
-    html += `<div class="stn" style="left:${xD - 4}px;top:${y}px"></div><div class="stn" style="left:${xU - 4}px;top:${y}px"></div>`;
+    html += `<div class="stn" style="left:10px;top:${y}px"></div><div class="stn" style="left:38px;top:${y}px"></div>`;
     html += `<button class="sname" data-act-route="station" data-crs="${esc(d.crs[i])}" style="top:${y - 3}px">${esc(name)}</button>`;
   });
   const placed = d.trains.map((t) => ({ t, y: 7 + yAt(t.pos) })).sort((a, b) => a.y - b.y);
   let lastChip = -Infinity;
   for (const { t, y } of placed) {
-    html += `<div class="tdot b-${t.band}" style="left:${(t.dir === 'down' ? xD : xU) - 6}px;top:${y - 9}px"></div>`;
+    html += `<div class="tdot b-${t.band}" style="left:${xOf(t.dir) - 6}px;top:${y - 9}px"></div>`;
     let cy = Math.max(y - 16, lastChip + 36);
     // keep chips off the station names
     for (const sy of ys) if (cy < sy + 18 && cy + 32 > sy - 8) cy = sy + 18;
@@ -237,14 +244,36 @@ function renderRoute() {
   const height = Math.max(ys[n - 1] + 40, lastChip + 44);
 
   return `${head}
-    <div class="summary">
+    <button class="summary" data-act-route="late" aria-label="List the trains on this route">
       <div class="avg b-${avgBand}"><b>${s.avg == null ? '–' : '+' + s.avg}</b><small>MIN AVG</small></div>
-      <div><div class="t1">${s.lateCount} of ${s.total} trains running late</div><div class="t2">${worst}</div></div>
-    </div>
-    <div class="cols"><span style="width:58px;white-space:nowrap">↓ &nbsp; ↑</span><span>Station</span></div>
+      <div class="sum-text"><div class="t1">${s.lateCount} of ${s.total} trains running late</div><div class="t2">${worst}</div></div>
+      <span class="sum-chev" aria-hidden="true">›</span>
+    </button>
+    <div class="cols"><span class="updn"><button class="flip" data-act-route="flip" aria-label="Swap top and bottom: put ${last} at the top">⇅</button></span><span>Station</span></div>
     <div class="strip" style="height:${height}px">${html}</div>
     ${legend()}
-    <p class="note">↓ towards ${last}, ↑ towards ${first}. Trains within a few km of the line are shown; a section keeps the colour of the last train through it for 20 minutes.</p>`;
+    <p class="note">Left line: Up, towards ${upEnd}. Right line: Down, towards ${downEnd}. Tap ⇅ to swap top and bottom, or a station for its board. Trains within a few km of the line are shown; a section keeps the colour of the last train through it for 20 minutes.</p>`;
+}
+
+// The trains on the route, late ones first; tap one for its train screen
+function routeTrainsSheet() {
+  if (!routeData || !routeData.trains) return;
+  const r = route.currentRoute();
+  const top = BY_CRS.get(r.crs[0]).name, bottom = BY_CRS.get(r.crs[r.crs.length - 1]).name;
+  const all = [...routeData.trains].sort((a, b) => (b.cancelled - a.cancelled) || (b.delay ?? -99) - (a.delay ?? -99));
+  const late = all.filter((t) => t.cancelled || t.delay >= 2), rest = all.filter((t) => !(t.cancelled || t.delay >= 2));
+  const row = (t) => {
+    const bd = bandOf(t.delay, t.cancelled);
+    return `<button class="row" data-act="train" data-arg="${esc(t.id)}"><span class="hc b-${bd}">${esc(t.code)}</span>
+      <span class="what">${t.dest ? 'to ' + esc(t.dest) : 'towards ' + esc(t.dir === 'down' ? bottom : top)}<small class="sub-line">${esc([t.last ? 'last seen ' + t.last : null, t.toc].filter(Boolean).join(' · '))}</small></span><span class="mins c-${bd}">${esc(shortLate(t.delay, t.cancelled))}</span></button>`;
+  };
+  openCustom(`<div class="st-head"><div><div class="meta">${esc(r.name)}</div><h2 id="sheet-title">${late.length} of ${all.length} trains running late</h2></div></div>
+    <div class="sheet-body list flush">
+      ${late.length ? `<div class="list-h">Late</div>${late.map(row).join('')}` : '<div class="empty">Nothing running late on this route right now.</div>'}
+      ${rest.length ? `<div class="list-h">On time</div>${rest.map(row).join('')}` : ''}
+    </div>`, {
+    train: (id) => { const t = all.find((x) => x.id === id); if (t) trainSheet(t); }
+  });
 }
 
 // Swap which end is at the top
@@ -382,6 +411,7 @@ $view.addEventListener('click', (e) => {
   if (ra) {
     if (ra.dataset.actRoute === 'pick') routePicker();
     else if (ra.dataset.actRoute === 'flip') flipRoute();
+    else if (ra.dataset.actRoute === 'late') routeTrainsSheet();
     else stationSheet(ra.dataset.crs);
     return;
   }

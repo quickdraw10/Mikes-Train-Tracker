@@ -25,6 +25,7 @@ export const LINES = [
   line('hull', 'Leeds – Hull', 'MIK SBY HOW GBD BUH HUL'),
   line('hulld', 'Doncaster – Hull', 'DON TNN GOO GBD'),
   line('mml', 'Midland Main Line', 'STP LUT BDM WEL KET MHR LEI LBO EMD DBY CHD SHF'),
+  line('mmlnot', 'Midland Main Line – Nottingham', 'EMD BEE NOT'),
   line('xc', 'Cross Country', 'BRI CNM BHM TAM BUT DBY'),
   line('gwml', 'Great Western Main Line', 'PAD RDG DID SWI CPM BTH BRI'),
   line('west', 'Bristol – Penzance', 'BRI WSM TAU TVP EXD NTA PLY BOD TRU RED SER PNZ'),
@@ -35,7 +36,7 @@ export const LINES = [
   line('swml', 'South Western Main Line', 'WAT CLJ WOK BSK WIN SOU BMH'),
   line('bml', 'Brighton Main Line', 'VIC CLJ ECR GTW HHE BTN')
 ];
-const LABELS = { KGX: 'London', EDB: 'Edinburgh', GLC: 'Glasgow', ABD: 'Aberdeen', NCL: 'Newcastle', YRK: 'York', LDS: 'Leeds', MAN: 'Manchester', LIV: 'Liverpool', SHF: 'Sheffield', DON: 'Doncaster', CRE: 'Crewe', BHM: 'Birmingham', PBO: 'Peterborough', DBY: 'Derby', LEI: 'Leicester', BRI: 'Bristol', CDF: 'Cardiff', SWA: 'Swansea', RDG: 'Reading', NRW: 'Norwich', SOU: 'Southampton', BTN: 'Brighton', AFK: 'Ashford', CAR: 'Carlisle', PRE: 'Preston', SCA: 'Scarborough', DEE: 'Dundee', BMH: 'Bournemouth', HUL: 'Hull', EXD: 'Exeter', PLY: 'Plymouth', PNZ: 'Penzance', TAU: 'Taunton' };
+const LABELS = { KGX: 'London', EDB: 'Edinburgh', GLC: 'Glasgow', ABD: 'Aberdeen', NCL: 'Newcastle', YRK: 'York', LDS: 'Leeds', MAN: 'Manchester', LIV: 'Liverpool', SHF: 'Sheffield', DON: 'Doncaster', CRE: 'Crewe', BHM: 'Birmingham', PBO: 'Peterborough', DBY: 'Derby', LEI: 'Leicester', BRI: 'Bristol', CDF: 'Cardiff', SWA: 'Swansea', RDG: 'Reading', NRW: 'Norwich', SOU: 'Southampton', BTN: 'Brighton', AFK: 'Ashford', CAR: 'Carlisle', PRE: 'Preston', SCA: 'Scarborough', DEE: 'Dundee', BMH: 'Bournemouth', HUL: 'Hull', NOT: 'Nottingham', EXD: 'Exeter', PLY: 'Plymouth', PNZ: 'Penzance', TAU: 'Taunton' };
 const BELOW_LABEL = new Set(['PNZ']);
 const LEFT_LABEL = new Set(['PLY', 'EXD', 'TAU', 'SBY', 'LIV', 'GLC', 'PRE', 'CAR', 'CRE', 'BRI', 'CDF', 'SWA', 'BMH', 'SOU', 'BHM', 'RDG']);
 
