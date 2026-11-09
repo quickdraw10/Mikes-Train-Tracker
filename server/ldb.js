@@ -6,7 +6,7 @@
 //                (falls back to LDB_KEY if not set)
 // Boards are cached for 30 seconds so many phones don't multiply requests.
 
-import { staffBoard, staffEnabled, hm, textOf, expectedOf, serviceToLive } from './staff.js';
+import { staffBoard, staffEnabled, hm, textOf, expectedOf, serviceToLive, firstClassOf } from './staff.js';
 
 const DEP_BASE = process.env.LDB_DEP_BASE || 'https://api1.raildata.org.uk/1010-live-departure-board-dep1_2/LDBWS/api/20220120';
 const ARR_BASE = process.env.LDB_ARR_BASE || 'https://api1.raildata.org.uk/1010-live-arrival-board-arr/LDBWS/api/20220120';
@@ -71,7 +71,7 @@ export function normaliseStaff(data) {
       place: names(s.destination) || '—', platform: s.platform || null, platformHidden: Boolean(s.platformIsHidden),
       toc: s.operator || null, tocCode: s.operatorCode || null, passenger: s.isPassengerService !== false,
       reason: textOf(s.cancelReason, 'canc') || textOf(s.delayReason, 'late') || null,
-      length: Number(s.length) || null,
+      length: Number(s.length) || null, firstClass: firstClassOf(s),
       next: nextCall(s.subsequentLocations)
     };
   });
@@ -115,7 +115,7 @@ export async function serviceDetail(crs, type, id, station) {
       const ahead = live.stops.map((x) => ({ ...x, state: x.actual && x !== live.stops[0] ? 'passed' : 'due' }));
       const stops = [...passed, ...ahead];
       return { mode: 'live', source: 'darwin', code: live.headcode, uid: live.uid, operator: live.operator, operatorCode: live.operatorCode,
-        origin: live.origin, dest: live.dest, length: live.length, cancelled: live.cancelled, cancelReason: live.cancelReason, delayReason: live.delayReason,
+        origin: live.origin, dest: live.dest, length: live.length, firstClass: live.firstClass, cancelled: live.cancelled, cancelReason: live.cancelReason, delayReason: live.delayReason,
         stops, next: ahead.find((x) => x.state === 'due' && !x.pass && !x.cancelled) || null, matched: true };
     }
   }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createTimetable, ingest, finish, matchByHeadcode, trainDetail, mins } from './timetable.js';
 import { createNational, handleNational, detailOf, attachAll } from './national.js';
 import { buildStationPanel } from './panelbuild.js';
-import { findService, serviceToLive, staffTime, textOf, reasonMap } from './staff.js';
+import { findService, serviceToLive, staffTime, textOf, reasonMap, firstClassOf } from './staff.js';
 import { normaliseStaff } from './ldb.js';
 import { mergeLive } from './national.js';
 import { buildView } from '../app/model.js';
@@ -182,6 +182,13 @@ test('Staff Version quirks: no estimate means "Delayed", reasons are codes, time
   const b2 = normaliseStaff({ trainServices: [{ trainid: '1E14', std: '2026-11-09T14:17:00', destination: [{ locationName: 'London Kings Cross' }],
     subsequentLocations: [{ locationName: 'COLTONJ', isPass: true }, { locationName: 'Doncaster', isCancelled: true }, { locationName: 'Newark North Gate' }] }] });
   assert.equal(b2.services[0].next, 'Newark North Gate', 'next stop skips passing points and cancelled calls');
+});
+
+test('first class is given by coach number from the formation, never guessed', () => {
+  assert.equal(firstClassOf({ formation: { coaches: [{ number: 'A', coachClass: 'First' }, { number: 'B', coachClass: 'First' }, { number: 'C', coachClass: 'Standard' }] } }), 'First class: coaches A & B');
+  assert.equal(firstClassOf({ formation: { coaches: [{ number: '1', coachClass: 'Mixed' }, { number: '2', coachClass: 'Standard' }] } }), 'Part first class: coach 1');
+  assert.equal(firstClassOf({ formation: { coaches: [{ number: '1', coachClass: 'Standard' }] } }), 'Standard class only');
+  assert.equal(firstClassOf({}), null);
 });
 
 test('reason codes keep the code and add Darwin\'s meaning when the list is loaded', () => {

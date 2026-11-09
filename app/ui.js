@@ -84,14 +84,14 @@ export function boardHTML(b, type) {
     const info = [
       s.next && !s.cancelled ? `<small class="bnext">Next stop: ${esc(s.next)}</small>` : '',
       s.toc || s.passenger === false ? `<small>${opBadge(s.toc, s.tocCode)}${esc([s.passenger === false ? 'Not in passenger service' : null, s.toc].filter(Boolean).join(' · '))}</small>` : '',
-      s.length ? `<small>${s.length} coaches</small>` : '',
-      s.reason ? `<small class="breason">${esc(s.reason)}</small>` : ''
+      s.length || s.firstClass ? `<small>${esc([s.length ? s.length + ' coaches' : null, s.firstClass].filter(Boolean).join(' · '))}</small>` : '',
     ].join('');
     return `<button class="brow${s.passenger === false ? ' nonpass' : ''}" data-act="svc" data-arg="${esc(s.id)}" aria-label="${esc((s.headcode ? s.headcode + ' ' : '') + s.place)}, details">
       <span class="btime">${esc(s.booked)}</span>
       <span class="bexp c-${bd}">${esc(s.departed ? 'Dep ' + (s.expected === 'On time' ? s.booked : s.expected) : exp)}</span>
       <span class="bplace"><b>${s.headcode ? `<span class="hcode">${esc(s.headcode)}</span>` : ''}${esc(s.place)}</b>${info}</span>
       <span class="bplat${s.platform ? '' : ' none'}${s.platformHidden ? ' hidden-plat' : ''}" title="${s.platformHidden ? 'Not shown on public screens' : ''}">${esc(s.platform || '–')}</span>
+      ${s.reason ? `<span class="breason-row">${esc(s.reason)}</span>` : ''}
     </button>`;
   }).join('');
   const msgs = (b.messages || []).map((m) => `<p class="bmsg">${esc(m)}</p>`).join('');

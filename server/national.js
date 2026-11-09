@@ -184,7 +184,7 @@ export function mergeLive(d, live) {
     ...d, stops, next, source: 'darwin',
     origin: d.origin || live.origin, dest: live.dest || d.dest,
     operator: d.operator || live.operator, operatorCode: live.operatorCode || null, cancelled: d.cancelled || live.cancelled,
-    cancelReason: live.cancelReason, delayReason: live.delayReason, length: live.length,
+    cancelReason: live.cancelReason, delayReason: live.delayReason, length: live.length, firstClass: live.firstClass,
     matched: true
   };
 }

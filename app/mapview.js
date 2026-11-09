@@ -302,7 +302,7 @@ export async function trainSheet(t) {
       return `<div class="stop ${cls}"><i></i><span class="sn">${esc(s.name)}${s.pass ? '<small>passes</small>' : plat ? `<small>${plat}</small>` : ''}</span><span class="sb">${esc(booked)}</span><span class="sa">${right}</span></div>`;
     }).join('')}</div>` : (d && d.note ? `<p class="note">${esc(d.note)}</p>` : '');
     const extras = d ? [
-      d.length ? `${d.length} coaches` : null,
+      d.length || d.firstClass ? esc([d.length ? d.length + ' coaches' : null, d.firstClass].filter(Boolean).join(' · ')) : null,
       d.cancelReason ? esc(d.cancelReason) : d.delayReason ? esc(d.delayReason) : null
     ].filter(Boolean) : [];
     const toggle = passCount ? `<button class="detail-toggle" data-act="detail" aria-pressed="${detailed}">${detailed ? 'Hide' : 'Show'} ${passCount} passing point${passCount === 1 ? '' : 's'}</button>` : '';

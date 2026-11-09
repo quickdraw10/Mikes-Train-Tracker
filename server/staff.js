@@ -92,6 +92,7 @@ export function serviceToLive(svc, boardStation) {
   return {
     source: 'darwin',
     rid: svc.rid || null, uid: svc.uid || null, headcode: svc.trainid || svc.trainId || null,
+    firstClass: firstClassOf(svc),
     operator: svc.operator || null, operatorCode: svc.operatorCode || null, length: Number(svc.length) || null,
     cancelled: Boolean(svc.isCancelled), cancelReason: textOf(svc.cancelReason, 'canc'), delayReason: textOf(svc.delayReason, 'late'),
     origin: names(svc.origin), dest: names(svc.destination),
@@ -162,4 +163,18 @@ export function expectedOf(est, type, booked) {
   if (est) return hm(est);
   if (type === 'Delayed') return 'Delayed';
   return booked;
+}
+
+// Where first class is, from the train's formation: the coach numbers National Rail gives
+// (e.g. "First class: coaches A & B"). Null when the formation isn't published.
+export function firstClassOf(svc) {
+  const coaches = list(svc && svc.formation && svc.formation.coaches);
+  if (!coaches.length) return null;
+  const first = coaches.filter((c) => /first/i.test(c.coachClass || '')).map((c) => c.number).filter(Boolean);
+  const mixed = coaches.filter((c) => /mixed/i.test(c.coachClass || '')).map((c) => c.number).filter(Boolean);
+  const join = (xs) => (xs.length === 1 ? 'coach ' + xs[0] : 'coaches ' + xs.slice(0, -1).join(', ') + ' & ' + xs[xs.length - 1]);
+  if (first.length) return 'First class: ' + join(first) + (mixed.length ? ', part first: ' + join(mixed) : '');
+  if (mixed.length) return 'Part first class: ' + join(mixed);
+  if (coaches.some((c) => c.coachClass)) return 'Standard class only';
+  return null;
 }

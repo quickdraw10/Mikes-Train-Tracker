@@ -406,3 +406,4 @@ button.brow { width: 100%; border: 0; border-bottom: 1px solid var(--line); back
 .bplace .bnext { color: var(--text); }
 .bplace .breason { color: var(--mid); }
 .back-link { align-self: flex-start; min-height: 36px; padding: 0; border: 0; background: none; color: var(--trim); font: 600 15px var(--body); cursor: pointer; flex: none; }
+.brow .breason-row { grid-column: 1 / -1; margin-top: -2px; font-size: 12px; line-height: 1.35; color: var(--mid); }
