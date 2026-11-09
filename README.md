@@ -70,8 +70,8 @@ npm test           # checks the feed parsing with sample messages
    Busy signals decode within an hour; rarely used ones can take days, and running it again adds to
    what it found. If an area sends no signalling data the tool says so, and its signals stay hollow.
 6. **Station boards:** register at https://raildata.org.uk (free, "Individual not affiliated with a
-   company"), subscribe to **Live Departure Board** and, for arrivals, **Live Arrival and Departure
-   Boards**, and copy each product's Consumer key into `LDB_KEY` and `LDB_ARR_KEY`.
+   company"), subscribe to **Live Departure Board** and, for arrivals, **Live Arrival
+   Board**, and copy each product's Consumer key into `LDB_KEY` and `LDB_ARR_KEY`.
 7. `npm start` – it now says "live mode". The map needs `npm run corpus` (step 3) to know which
    station each movement report is at.
 

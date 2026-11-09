@@ -2,12 +2,12 @@
 // Boards, through the Rail Data Marketplace (raildata.org.uk). Free; each
 // product you subscribe to there gives a "Consumer key":
 //   LDB_KEY      "Live Departure Board" product            -> departures
-//   LDB_ARR_KEY  "Live Arrival and Departure Boards" product -> arrivals
+//   LDB_ARR_KEY  "Live Arrival Board" product                -> arrivals
 //                (falls back to LDB_KEY if not set)
 // Boards are cached for 30 seconds so many phones don't multiply requests.
 
 const DEP_BASE = process.env.LDB_DEP_BASE || 'https://api1.raildata.org.uk/1010-live-departure-board-dep1_2/LDBWS/api/20220120';
-const ARR_BASE = process.env.LDB_ARR_BASE || 'https://api1.raildata.org.uk/1010-live-arrival-and-departure-boards-arr-and-dep1_1/LDBWS/api/20220120';
+const ARR_BASE = process.env.LDB_ARR_BASE || 'https://api1.raildata.org.uk/1010-live-arrival-board-arr/LDBWS/api/20220120';
 const cache = new Map();
 
 function minutes(hhmm) {
@@ -54,7 +54,7 @@ export async function getBoard(crs, type = 'dep') {
   const hit = cache.get(ck);
   if (hit && Date.now() - hit.at < 30000) return hit.data;
   const url = type === 'arr'
-    ? `${ARR_BASE}/GetArrDepBoardWithDetails/${encodeURIComponent(crs)}?numRows=20`
+    ? `${ARR_BASE}/GetArrBoardWithDetails/${encodeURIComponent(crs)}?numRows=15`
     : `${DEP_BASE}/GetDepartureBoard/${encodeURIComponent(crs)}?numRows=15`;
   const res = await fetch(url, { headers: { 'x-apikey': key }, signal: AbortSignal.timeout(10000) });
   if (!res.ok) return { error: `National Rail returned ${res.status}. Check the key is subscribed to the right product.` };
