@@ -108,6 +108,8 @@ let reasonsInfo = { loaded: false, tried: [] };
 const STAFF_ROOT = BASE.replace(/\/LDBSVWS\/.*$/, '');
 const REF_URLS = () => [
   process.env.LDB_REF_URL,
+  // the Staff Version has its own GetReasonCodeList alongside the boards (see its swagger)
+  `${BASE}/GetReasonCodeList`,
   `${STAFF_ROOT}/LDBSVWS/api/ref/20211101/GetReasonCodeList`,
   'https://api1.raildata.org.uk/1010-reference-data1_0/LDBSVWS/api/ref/20211101/GetReasonCodeList'
 ].filter(Boolean);
