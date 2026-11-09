@@ -71,7 +71,7 @@ export function boardHTML(b, type) {
   if (b.error) return `<div class="empty">${esc(b.error)}</div>`;
   if (!b.services.length) return `<div class="empty">No ${type === 'arr' ? 'arrivals' : 'departures'} in the next couple of hours.</div>`;
   const rows = b.services.map((s) => {
-    const bd = bandOf(s.delay, s.cancelled);
+    const bd = s.expected === 'Delayed' && !s.cancelled ? 'mid' : bandOf(s.delay, s.cancelled);
     const exp = s.cancelled ? 'Canc' : s.expected === 'On time' ? 'On time' : s.expected || '–';
     return `<div class="brow${s.passenger === false ? ' nonpass' : ''}">
       <span class="btime">${esc(s.booked)}</span>

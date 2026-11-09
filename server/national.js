@@ -150,7 +150,12 @@ export async function liveDetailOf(nat, id, getBoard = staffBoard) {
     const svc = findService(board, { uid: t.uid, headcode: t.code });
     if (!svc) continue;
     const st = BY_CRS.get(crs) || { name: board.locationName || crs, crs };
-    return mergeLive(d, serviceToLive(svc, st));
+    const live = serviceToLive(svc, st);
+    // Passing points come with short codes (e.g. COLTONJ); use the timetable's place names
+    if (nat.tt) for (const s of live.stops) {
+      if (s.tiploc && (s.name === s.tiploc || /^[A-Z0-9 ]+$/.test(s.name)) && nat.tt.tiplocs.has(s.tiploc)) s.name = nameOfTiploc(nat.tt, s.tiploc);
+    }
+    return mergeLive(d, live);
   }
   d.liveNote = 'National Rail has no live calling points for this train (freight and some specials are not covered).';
   return d;
@@ -162,7 +167,7 @@ export function mergeLive(d, live) {
   const keep = passed.filter((s) => s.name !== firstAhead.name);
   const ahead = live.stops.map((s) => ({
     ...s, state: s.actual ? 'passed' : 'due',
-    expected: s.cancelled ? null : (s.expected && /\d/.test(s.expected) ? s.expected : s.expected === 'On time' ? s.booked : s.expected)
+    expected: s.cancelled ? null : s.expected
   }));
   const stops = [...keep, ...ahead];
   const next = ahead.find((s) => s.state === 'due' && !s.pass && !s.cancelled) || null;

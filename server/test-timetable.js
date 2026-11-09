@@ -4,6 +4,7 @@ import { createTimetable, ingest, finish, matchByHeadcode, trainDetail, mins } f
 import { createNational, handleNational, detailOf, attachAll } from './national.js';
 import { buildStationPanel } from './panelbuild.js';
 import { findService, serviceToLive, staffTime } from './staff.js';
+import { normaliseStaff } from './ldb.js';
 import { mergeLive } from './national.js';
 
 let passed = 0;
@@ -126,6 +127,18 @@ test('live National Rail stops replace the timetable ahead, including cancelled 
   assert.equal(d.stops[4].expected, '14:55');
   assert.equal(d.delayReason, 'A late running train');
   assert.equal(staffTime(Date.UTC(2026, 6, 1, 13, 5, 9)), '20260701T140509'); // BST
+});
+
+test('Staff Version quirks: no estimate means "Delayed", reasons are codes, times have seconds', () => {
+  const live = serviceToLive({ uid: 'U', trainid: '1E14', sta: '2026-11-09T14:14:00', ata: '2026-11-09T14:40:36', std: '2026-11-09T14:17:00', departureType: 'Delayed', delayReason: { value: 871 },
+    subsequentLocations: [{ locationName: 'COLTONJ', tiploc: 'COLTONJ', isPass: true, std: '2026-11-09T14:21:00', departureType: 'Delayed' }] }, { name: 'York', crs: 'YRK' });
+  assert.equal(live.stops[0].expected, 'Delayed');
+  assert.equal(live.stops[0].booked, '14:17');
+  assert.equal(live.stops[1].pass, true);
+  assert.equal(live.delayReason, 'Reason code 871');
+  const b = normaliseStaff({ trainServices: [{ trainid: '1E14', std: '2026-11-09T14:17:00', departureType: 'Delayed', destination: [{ locationName: 'London Kings Cross' }], platform: '9' }] });
+  assert.equal(b.services[0].expected, 'Delayed');
+  assert.equal(b.services[0].delay, null);
 });
 
 console.log(`\n${passed} timetable and panel tests passed`);

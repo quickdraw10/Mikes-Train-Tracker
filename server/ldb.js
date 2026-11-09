@@ -6,7 +6,7 @@
 //                (falls back to LDB_KEY if not set)
 // Boards are cached for 30 seconds so many phones don't multiply requests.
 
-import { staffBoard, staffEnabled, hm } from './staff.js';
+import { staffBoard, staffEnabled, hm, textOf, expectedOf } from './staff.js';
 
 const DEP_BASE = process.env.LDB_DEP_BASE || 'https://api1.raildata.org.uk/1010-live-departure-board-dep1_2/LDBWS/api/20220120';
 const ARR_BASE = process.env.LDB_ARR_BASE || 'https://api1.raildata.org.uk/1010-live-arrival-board-arr/LDBWS/api/20220120';
@@ -54,7 +54,7 @@ export function normalise(data, type) {
 export function normaliseStaff(data) {
   const services = (data.trainServices || []).filter((s) => s.std).map((s) => {
     const booked = hm(s.std);
-    const expected = s.atd ? hm(s.atd) : hm(s.etd);
+    const expected = s.atd ? hm(s.atd) : expectedOf(s.etd, s.departureType, booked);
     const cancelled = Boolean(s.isCancelled);
     return {
       id: s.rid || s.uid || booked + names(s.destination), headcode: s.trainid || s.trainId || null,
@@ -69,7 +69,7 @@ export function normaliseStaff(data) {
   });
   return { mode: 'live', source: 'staff', crs: data.crs, name: data.locationName, type: 'dep', services, messages: [] };
 }
-const textOf = (r) => (!r ? null : typeof r === 'string' ? r : r.value || r.Value || null);
+
 
 export async function getBoard(crs, type = 'dep') {
   if (type === 'dep' && staffEnabled()) {

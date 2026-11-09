@@ -74,13 +74,17 @@ const names = (l) => list(l).map((x) => x.locationName).filter(Boolean).join(' &
 export function serviceToLive(svc, boardStation) {
   const here = {
     name: boardStation.name, crs: boardStation.crs,
-    booked: hm(svc.std || svc.sta), expected: hm(svc.etd || svc.eta), actual: hm(svc.atd || svc.ata),
+    booked: hm(svc.std || svc.sta),
+    expected: svc.std ? expectedOf(svc.etd, svc.departureType, hm(svc.std)) : expectedOf(svc.eta, svc.arrivalType, hm(svc.sta)),
+    actual: hm(svc.atd) || null,
     platform: svc.platformIsHidden ? null : svc.platform || null, hiddenPlatform: svc.platformIsHidden ? svc.platform || null : null,
     cancelled: Boolean(svc.isCancelled), pass: false
   };
   const ahead = locationsOf(svc).map((l) => ({
-    name: l.locationName || l.tiploc, crs: l.crs || null,
-    booked: hm(l.std || l.sta || l.st), expected: hm(l.etd || l.eta || l.et), actual: hm(l.atd || l.ata || l.at),
+    name: l.locationName || l.tiploc, tiploc: l.tiploc || null, crs: l.crs || null,
+    booked: hm(l.sta || l.std || l.st),
+    expected: l.sta ? expectedOf(l.eta, l.arrivalType, hm(l.sta)) : expectedOf(l.etd || l.et, l.departureType, hm(l.std || l.st)),
+    actual: hm(l.ata || l.atd || l.at),
     working: hm(l.wtd || l.wta || l.wtp),
     platform: l.platformIsHidden ? null : l.platform || null, hiddenPlatform: l.platformIsHidden ? l.platform || null : null,
     cancelled: Boolean(l.isCancelled), pass: Boolean(l.isPass), operational: Boolean(l.isOperational)
@@ -95,8 +99,18 @@ export function serviceToLive(svc, boardStation) {
   };
 }
 
-function textOf(r) {
-  if (!r) return null;
-  if (typeof r === 'string') return r;
-  return r.value || r.Value || r.reason || null;
+// The Staff Version gives reasons as Darwin reason codes (e.g. 871), not text
+export function textOf(r) {
+  if (r == null || r === '') return null;
+  const v = typeof r === 'object' ? (r.value ?? r.Value ?? r.reason ?? r.code ?? null) : r;
+  if (v == null || v === '') return null;
+  if (/^\d+$/.test(String(v))) return `Reason code ${v}`;
+  return String(v);
+}
+
+// Expected time: the estimate if there is one, else Darwin's "Delayed" flag, else the booked time
+export function expectedOf(est, type, booked) {
+  if (est) return hm(est);
+  if (type === 'Delayed') return 'Delayed';
+  return booked;
 }
