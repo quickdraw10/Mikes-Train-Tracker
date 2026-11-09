@@ -1,4 +1,4 @@
-// The app: design A (signal box panel) and design C (route line).
+// The app: design A (signal box panel), design C (route line) and the tabs.
 // Gets live updates from the data service; if it can't reach one,
 // it runs demo trains in the browser so there's always something to see.
 
@@ -6,8 +6,10 @@ import { API_BASE } from './config.js';
 import { buildView, band } from './model.js';
 import { createSim } from './sim.js';
 import * as api from './api.js';
-import { closeCustomSheet } from './ui.js';
-import { showMap } from './mapview.js';
+import { closeCustomSheet, openSheet as openCustom, toast } from './ui.js';
+import { showMap, trainSheet, stationSheet } from './mapview.js';
+import * as route from './route.js';
+import { BY_CRS, searchStations } from './geo.js';
 import { showBoards } from './boards.js';
 
 const $view = document.getElementById('view');
@@ -153,48 +155,139 @@ function legend() {
   return `<div class="legend"><span><i class="b-ok"></i>On time</span><span><i class="b-mid"></i>2–9 late</span><span><i class="b-bad"></i>10+ late</span>${extra}</div>`;
 }
 
-// ---------- C: route line ----------
+// ---------- C: route line (any route you choose) ----------
+let routeData = null;
+let routeTimer = null;
+const ROUTE_POLL_MS = 20000;
+
+async function loadRoute() {
+  const r = route.currentRoute();
+  const d = await route.refresh(r).catch(() => null);
+  if (d && d.id === route.currentRoute().id) { routeData = d; if (ui.tab === 'route') render(); }
+}
+function startRoute() {
+  if (routeTimer) return;
+  loadRoute();
+  routeTimer = setInterval(() => { if (ui.tab === 'route' && !document.hidden) loadRoute(); }, ROUTE_POLL_MS);
+}
+function useRoute(r) {
+  const c = route.setRoute(r);
+  if (!c) return;
+  routeData = null;
+  closeCustomSheet();
+  switchTab('route');
+  loadRoute();
+}
+
 function renderRoute() {
-  const r = ui.view.routes[ui.route];
-  const gap = 84, top = 12, xD = 14, xU = 42;
-  const n = r.stations.length;
+  const r = route.currentRoute();
+  const d = routeData && routeData.id === r.id ? routeData : null;
+  const first = esc(BY_CRS.get(r.crs[0]).name), last = esc(BY_CRS.get(r.crs[r.crs.length - 1]).name);
+  const head = `<header class="head route-head"><div class="rh-top"><h1>${esc(r.name)}</h1><button class="change" data-act-route="pick">Change</button></div>
+    <div class="sub">${r.crs.length} stations · ${route.routeKm(r)} km${d ? ' · ' + (d.mode === 'live' ? '<span class="pill live">Live</span>' : '<span class="pill demo">Demo</span>') + ' ' + hhmm(d.updated) : ''}</div></header>`;
+  if (!d) return head + `<div class="empty">Finding trains on this route…</div>`;
+
+  // Each section is tall enough for the trains in it, so busy stretches open up
+  const n = r.crs.length;
+  const counts = d.sections.down.map((s, i) => s.count + d.sections.up[i].count);
+  const gaps = counts.map((c) => Math.max(70, 40 + c * 38));
+  const ys = [12];
+  for (let i = 0; i < n - 1; i++) ys.push(ys[i] + gaps[i]);
+  const yAt = (pos) => { const i = Math.min(n - 2, Math.floor(pos)); return ys[i] + (pos - i) * gaps[i]; };
+  const xD = 14, xU = 42;
   let html = '';
   for (const dir of ['down', 'up']) {
-    r.sections[dir].forEach((s, i) => {
-      html += `<div class="seg b-${s.band}" style="left:${dir === 'down' ? xD : xU}px;top:${top + i * gap + 6}px;height:${gap}px"></div>`;
+    d.sections[dir].forEach((s, i) => {
+      html += `<div class="seg b-${s.band}" style="left:${dir === 'down' ? xD : xU}px;top:${ys[i] + 6}px;height:${gaps[i]}px"></div>`;
     });
   }
-  r.stations.forEach((name, i) => {
-    const y = top + i * gap;
+  d.stations.forEach((name, i) => {
+    const y = ys[i];
     html += `<div class="stn" style="left:${xD - 4}px;top:${y}px"></div><div class="stn" style="left:${xU - 4}px;top:${y}px"></div>`;
-    html += `<div class="sname" style="top:${y - 3}px">${esc(name)}</div>`;
+    html += `<button class="sname" data-act-route="station" data-crs="${esc(d.crs[i])}" style="top:${y - 3}px">${esc(name)}</button>`;
   });
-  const placed = r.trains.map((t) => ({ t, y: top + 7 + t.pos * gap })).sort((a, b) => a.y - b.y);
+  const placed = d.trains.map((t) => ({ t, y: 7 + yAt(t.pos) })).sort((a, b) => a.y - b.y);
   let lastChip = -Infinity;
   for (const { t, y } of placed) {
     html += `<div class="tdot b-${t.band}" style="left:${(t.dir === 'down' ? xD : xU) - 6}px;top:${y - 9}px"></div>`;
-    // trains sit on the station rows' right-hand side; push down if two would overlap
-    const cy = Math.max(y - 16, lastChip + 36);
+    let cy = Math.max(y - 16, lastChip + 36);
+    // keep chips off the station names
+    for (const sy of ys) if (cy < sy + 18 && cy + 32 > sy - 8) cy = sy + 18;
     lastChip = cy;
-    html += `<button class="chip" data-train="${esc(t.code)}" style="top:${cy}px" aria-label="${esc(t.code)} ${t.dir === 'down' ? 'away from London' : 'towards London'}, ${esc(lateText(t.delay, t.cancelled))}">
-      <span class="arrow">${t.dir === 'down' ? '↓' : '↑'}</span><span class="code">${esc(t.code)}</span><span class="late b-${t.band}">${esc(shortLate(t.delay, t.cancelled))}</span></button>`;
+    html += `<button class="chip" data-rtrain="${esc(t.id)}" style="top:${cy}px" aria-label="${esc(t.code)} towards ${t.dir === 'down' ? last : first}, ${esc(lateText(t.delay, t.cancelled))}">
+      <span class="arrow">${t.dir === 'down' ? '↓' : '↑'}</span><span class="code">${esc(t.code)}</span><span class="late b-${t.band}">${esc(shortLate(t.delay, t.cancelled))}</span>${t.dest ? `<span class="cdest">${esc(t.dest)}</span>` : ''}</button>`;
   }
-  const s = r.summary;
+  const s = d.summary;
   const avgBand = s.avg == null ? 'none' : band({ delay: s.avg });
-  const worst = s.worst && s.worst.delay >= 2 ? `Worst: ${esc(s.worst.code)} ${esc(shortLate(s.worst.delay))}${s.worst.last ? ' near ' + esc(s.worst.last.name) : ''}` : 'Nothing badly late';
-  const height = top + (n - 1) * gap + 40;
+  const worst = s.worst && s.worst.delay >= 2 ? `Worst: ${esc(s.worst.code)} ${esc(shortLate(s.worst.delay))}${s.worst.last ? ' near ' + esc(s.worst.last) : ''}` : 'Nothing badly late';
+  const height = Math.max(ys[n - 1] + 40, lastChip + 44);
 
-  return `
-    <header class="head"><h1>${esc(r.name)}</h1><div class="sub">${statusLine(ui.view)}</div></header>
+  return `${head}
     <div class="summary">
       <div class="avg b-${avgBand}"><b>${s.avg == null ? '–' : '+' + s.avg}</b><small>MIN AVG</small></div>
       <div><div class="t1">${s.lateCount} of ${s.total} trains running late</div><div class="t2">${worst}</div></div>
     </div>
-    <div class="cols"><span style="width:58px;white-space:nowrap">Down Up</span><span>Station</span></div>
+    <div class="cols"><span style="width:58px;white-space:nowrap">↓ &nbsp; ↑</span><span>Station</span></div>
     <div class="strip" style="height:${height}px">${html}</div>
     ${legend()}
-    <p class="note">Down = away from London. A section keeps the colour of the last train through it for 20 minutes.</p>`;
+    <p class="note">↓ towards ${last}, ↑ towards ${first}. Trains within a few km of the line are shown; a section keeps the colour of the last train through it for 20 minutes.</p>`;
 }
+
+// Choosing a route: main lines, your recent routes, or build one
+function routePicker() {
+  const cur = route.currentRoute();
+  const row = (r, act) => `<button class="row" data-act="${act}" data-arg="${esc(r.id)}"><span class="what"><b>${esc(r.name)}</b><small class="sub-line">${r.crs.length} stations · ${route.routeKm(r)} km</small></span>${r.id === cur.id ? '<span class="tick">✓</span>' : ''}</button>`;
+  const recent = route.recentRoutes();
+  openCustom(`<div class="st-head"><div><div class="meta">Route tab</div><h2 id="sheet-title">Choose a route</h2></div></div>
+    <div class="sheet-body list flush">
+      <div class="list-h">Build your own</div>
+      <button class="row" data-act="build"><span class="what"><b>Pick stations in order</b><small class="sub-line">Or open a train and tap "Make this my route"</small></span><span class="tick">＋</span></button>
+      <button class="row" data-act="reverse"><span class="what"><b>Flip this route</b><small class="sub-line">${esc(route.nameFor([...cur.crs].reverse()))}</small></span><span class="tick">⇅</span></button>
+      ${recent.length ? `<div class="list-h">Your recent routes</div>${recent.map((r) => row(r, 'recent')).join('')}` : ''}
+      <div class="list-h">Main lines</div>${route.PRESETS.map((r) => row(r, 'preset')).join('')}
+    </div>`, {
+    preset: (id) => useRoute(route.PRESETS.find((r) => r.id === id)),
+    recent: (id) => useRoute(recent.find((r) => r.id === id)),
+    reverse: () => useRoute({ name: cur.name.includes(' – ') ? cur.name.split(' – ').reverse().join(' – ') : cur.name + ' (reversed)', crs: [...cur.crs].reverse() }),
+    build: () => routeBuilder()
+  });
+}
+
+function routeBuilder(startCrs) {
+  const picked = startCrs ? [startCrs] : [];
+  const listHTML = () => picked.length
+    ? picked.map((c, i) => `<div class="rb-stop"><i></i><span>${esc(BY_CRS.get(c).name)}</span><button data-act="remove" data-arg="${i}" aria-label="Remove ${esc(BY_CRS.get(c).name)}">✕</button></div>`).join('')
+    : '<div class="empty">Add the stations in the order the trains run.</div>';
+  openCustom(`<div class="st-head"><div><div class="meta">Build a route</div><h2 id="sheet-title">Pick stations in order</h2></div></div>
+    <div class="sheet-body">
+      <div id="rb-list" class="rb-list"></div>
+      <label class="search rb-search" for="rb-q"><input id="rb-q" type="search" placeholder="Add a station" autocomplete="off" enterkeyhint="done"></label>
+      <ul id="rb-results" class="results inline" hidden></ul>
+      <p class="note">Tip: add the main stations along the line. Trains between them are placed on the route automatically.</p>
+    </div>
+    <div class="sheet-actions one"><button data-act="use" id="rb-use">Use this route</button></div>`, {
+    remove: (i) => { picked.splice(Number(i), 1); draw(); },
+    add: (crs) => { if (picked[picked.length - 1] !== crs) picked.push(crs); q.value = ''; results.hidden = true; draw(); q.focus(); },
+    use: () => { if (picked.length >= 2) useRoute({ crs: picked }); }
+  });
+  const q = document.getElementById('rb-q'), results = document.getElementById('rb-results');
+  const draw = () => {
+    document.getElementById('rb-list').innerHTML = listHTML();
+    const use = document.getElementById('rb-use');
+    use.disabled = picked.length < 2;
+    use.textContent = picked.length < 2 ? `Add ${2 - picked.length} more station${picked.length === 1 ? '' : 's'}` : `Use this route (${picked.length} stations)`;
+  };
+  q.addEventListener('input', () => {
+    const hits = searchStations(q.value, 6);
+    results.innerHTML = hits.map((h) => `<li><button data-act="add" data-arg="${h.crs}"><b>${esc(h.name)}</b><small>${h.crs}</small></button></li>`).join('');
+    results.hidden = !hits.length;
+  });
+  draw();
+  if (!startCrs) setTimeout(() => q.focus(), 50);
+}
+
+window.addEventListener('mtt:route', (e) => { useRoute(e.detail.route); toast(`Route set from ${e.detail.train}'s stops`); });
+window.addEventListener('mtt:build', (e) => { switchTab('route'); routeBuilder(e.detail.crs); });
 
 // ---------- train sheet ----------
 function openSheet(code) {
@@ -244,6 +337,7 @@ function switchTab(tab) {
   render();
   if (tab === 'map') showMap();
   if (tab === 'boards') showBoards();
+  if (tab === 'route') startRoute();
 }
 
 document.getElementById('info-btn').addEventListener('click', () => switchTab('info'));
@@ -254,6 +348,10 @@ document.querySelector('.tabs').addEventListener('click', (e) => {
   if (btn) switchTab(btn.dataset.tab);
 });
 $view.addEventListener('click', (e) => {
+  const rt = e.target.closest('[data-rtrain]');
+  if (rt) { const t = routeData && routeData.trains.find((x) => x.id === rt.dataset.rtrain); if (t) trainSheet(t); return; }
+  const ra = e.target.closest('[data-act-route]');
+  if (ra) { if (ra.dataset.actRoute === 'pick') routePicker(); else stationSheet(ra.dataset.crs); return; }
   const el = e.target.closest('[data-train]');
   if (el) openSheet(el.dataset.train);
 });

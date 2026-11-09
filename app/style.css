@@ -177,7 +177,8 @@ body[data-tab="map"] { overflow: hidden; }
 .areas { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
 .areas[hidden] { display: none; }
 .area-chip { flex: none; height: 34px; padding: 0 14px; border: 0; border-radius: 17px; background: var(--navy); color: #FFFFFF; font-weight: 600; font-size: 13px; box-shadow: inset 0 0 0 1.5px var(--trim), 0 4px 12px rgba(0,0,0,0.35); cursor: pointer; }
-.map-count { align-self: flex-start; display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 10px; background: rgba(11,13,18,0.85); font-size: 12px; color: var(--text2); pointer-events: none; }
+.map-count { align-self: flex-start; display: flex; align-items: center; gap: 6px; min-height: 34px; padding: 5px 10px; border: 0; border-radius: 10px; background: rgba(11,13,18,0.88); font: 12px var(--body); color: var(--text2); box-shadow: inset 0 0 0 1px var(--line); cursor: pointer; }
+.map-count .chev { color: var(--trim); font-size: 14px; margin-left: 2px; }
 .map-count:empty { display: none; }
 .map-buttons { position: absolute; right: 12px; bottom: 28px; z-index: 500; display: flex; flex-direction: column; gap: 10px; }
 .mbtn { width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 14px; background: rgba(23,26,33,0.94); color: var(--text); box-shadow: 0 6px 18px rgba(0,0,0,0.45), inset 0 0 0 1px var(--line); cursor: pointer; }
@@ -296,3 +297,25 @@ body[data-tab="map"] { overflow: hidden; }
 .bplace .hcode { font: 700 11px var(--mono); color: var(--trim); margin-right: 6px; }
 .brow.nonpass .bplace b { color: var(--text2); }
 .bplat.hidden-plat { box-shadow: inset 0 0 0 1.5px var(--trim); color: var(--trim); }
+.row .what .sub-line { display: block; font-size: 12px; color: var(--text2); }
+
+/* Keep page content from scrolling under the iPhone clock (black-translucent status bar) */
+body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 40; pointer-events: none; }
+body[data-tab="map"]::before { background: rgba(11,13,18,0.92); }
+
+/* Route tab: chosen route */
+.route-head .rh-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.route-head h1 { min-width: 0; }
+.change { flex: none; height: 36px; padding: 0 14px; border: 0; border-radius: 18px; background: var(--navy); color: #FFFFFF; font: 600 14px var(--body); box-shadow: inset 0 0 0 1.5px var(--trim); cursor: pointer; }
+button.sname { border: 0; padding: 0; background: none; color: var(--text); text-align: left; cursor: pointer; font-family: var(--body); }
+.chip .cdest { max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--text2); padding-right: 4px; }
+.row .tick { color: var(--trim); font-weight: 700; font-size: 16px; }
+.sheet-actions.one { grid-template-columns: 1fr; }
+.sheet-actions button:disabled { opacity: 0.5; box-shadow: inset 0 0 0 1px var(--line); }
+.rb-list { display: flex; flex-direction: column; margin-bottom: 12px; }
+.rb-stop { display: grid; grid-template-columns: 14px 1fr 36px; align-items: center; gap: 10px; min-height: 40px; position: relative; }
+.rb-stop i { width: 12px; height: 12px; border-radius: 50%; background: var(--bg); box-shadow: inset 0 0 0 3px var(--trim); z-index: 1; }
+.rb-stop + .rb-stop::before { content: ""; position: absolute; left: 5px; top: -20px; height: 40px; width: 2px; background: var(--trim); }
+.rb-stop button { width: 36px; height: 36px; border: 0; border-radius: 18px; background: transparent; color: var(--text2); cursor: pointer; }
+.rb-search { margin-bottom: 4px; }
+.results.inline { position: static; margin-top: 6px; box-shadow: inset 0 0 0 1px var(--line); max-height: none; }

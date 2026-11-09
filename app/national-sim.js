@@ -101,7 +101,7 @@ export function createNationalSim(count = 900) {
     const p = position(t, now);
     return {
       id: t.code, code: t.code, toc: t.toc, delay: t.delay, cancelled: t.cancelled, band: band(t),
-      lat: p.lat, lon: p.lon, last: p.from.name, lastEvent: 'Departed', next: p.to.name,
+      lat: p.lat, lon: p.lon, last: p.from.name, lastCrs: p.from.crs, lastEvent: 'Departed', next: p.to.name, nextCrs: p.to.crs,
       origin: t.path[0].name, dest: t.path[t.path.length - 1].name
     };
   }
@@ -131,7 +131,7 @@ export function createNationalSim(count = 900) {
     for (let i = t.leg + 1; i < t.path.length; i++) { const a = t.path[i - 1], b = t.path[i]; at += Math.max(2, km(a.lat, a.lon, b.lat, b.lon) / 1.3) * 60000 + (i > t.leg + 1 ? 60000 : 0); times[i] = at; }
     const stops = t.path.map((p, i) => {
       const passed = i <= t.leg;
-      return { name: p.name, booked: hm(times[i]), platform: String(1 + (p.crs.charCodeAt(0) + i) % 6), state: passed ? 'passed' : 'due',
+      return { name: p.name, crs: p.crs, booked: hm(times[i]), platform: String(1 + (p.crs.charCodeAt(0) + i) % 6), state: passed ? 'passed' : 'due',
         actual: passed ? times[i] + t.delay * 60000 : null, expected: passed ? null : hm(times[i] + t.delay * 60000) };
     });
     // Show off the live features: a fast train passes some stations, and the odd stop is cancelled

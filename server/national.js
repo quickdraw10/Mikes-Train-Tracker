@@ -110,7 +110,7 @@ export function trainsIn(nat, box, now = Date.now()) {
     if (t.terminated && now - t.updated > 10 * 60000) continue;
     const p = positionOf(t, now);
     if (!p || !inBox(p.lat, p.lon, box)) continue;
-    out.push({ id: t.id, code: t.code, toc: t.toc, delay: t.delay, cancelled: !!t.cancelled, band: band(t), lat: p.lat, lon: p.lon, last: t.at.name, lastEvent: t.event, lastAt: t.eventAt, next: t.next ? t.next.name : null, origin: t.originName || null, dest: t.destName || null });
+    out.push({ id: t.id, code: t.code, toc: t.toc, delay: t.delay, cancelled: !!t.cancelled, band: band(t), lat: p.lat, lon: p.lon, last: t.at.name, lastCrs: t.at.crs, nextCrs: t.next ? t.next.crs : null, lastEvent: t.event, lastAt: t.eventAt, next: t.next ? t.next.name : null, origin: t.originName || null, dest: t.destName || null });
   }
   // When zoomed far out, show the most delayed trains first
   out.sort((a, b) => (b.delay ?? 0) - (a.delay ?? 0));

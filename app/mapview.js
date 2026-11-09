@@ -6,6 +6,7 @@
 import * as api from './api.js';
 import { STATIONS } from './stations.js';
 import { BY_CRS, nearest, searchStations } from './geo.js';
+import { routeFromStops } from './route.js';
 import { esc, hhmm, lateText, shortLate, bandOf, openSheet, updateSheet, sheetOpen, closeCustomSheet, loadList, saveList, toast, boardHTML } from './ui.js';
 
 const AREAS_KEY = 'mtt.areas';
@@ -85,7 +86,7 @@ function drawTrains(res) {
   const count = document.getElementById('map-count');
   const shown = list.length < (res.total || 0) ? `${list.length} of ${res.total}` : `${list.length}`;
   const late = list.filter((t) => t.band === 'mid' || t.band === 'bad').length;
-  count.innerHTML = `<span class="pill ${res.mode === 'live' ? 'live' : 'demo'}">${res.mode === 'live' ? 'Live' : 'Demo'}</span> ${shown} train${res.total === 1 ? '' : 's'} in view · <span class="c-mid">${late} late</span>${list.length < (res.total || 0) ? ' · zoom in for all' : ''}`;
+  count.innerHTML = `<span class="pill ${res.mode === 'live' ? 'live' : 'demo'}">${res.mode === 'live' ? 'Live' : 'Demo'}</span> ${shown} train${res.total === 1 ? '' : 's'} in view · <span class="c-mid">${late} late</span>${list.length < (res.total || 0) ? ' · zoom in for all' : ''}<span class="chev" aria-hidden="true">▾</span>`;
 }
 
 function groupByScreen(list, px) {
@@ -123,6 +124,27 @@ function drawGroup(items) {
     .on('click', () => groupSheet(items)).addTo(trainLayer);
 }
 
+// The trains-in-view list behind the Live pill: most late first, capped when zoomed out
+const LIST_CAP = 50;
+function listSheet() {
+  if (!lastRes) return;
+  const all = [...(lastRes.trains || [])].sort((a, b) => RANK[b.band] - RANK[a.band] || (b.delay ?? 0) - (a.delay ?? 0) || a.code.localeCompare(b.code));
+  const items = all.slice(0, LIST_CAP);
+  const more = (lastRes.total || all.length) - items.length;
+  const rows = items.map((t) => {
+    const bd = bandOf(t.delay, t.cancelled);
+    const where = t.dest ? 'to ' + t.dest : t.next ? 'next ' + t.next : t.last ? 'at ' + t.last : '';
+    return `<button class="row" data-act="train" data-arg="${esc(t.id)}"><span class="hc b-${bd}">${esc(t.code)}</span>
+      <span class="what">${esc(where)}${t.toc ? `<small class="sub-line">${esc(t.toc)}</small>` : ''}</span><span class="mins c-${bd}">${esc(shortLate(t.delay, t.cancelled))}</span></button>`;
+  }).join('');
+  openSheet(`<div class="st-head"><div><div class="meta">${lastRes.mode === 'live' ? 'Live' : 'Demo'} · most late first</div><h2 id="sheet-title">${lastRes.total || 0} trains in view</h2></div></div>
+    <div class="sheet-body list flush">${rows || '<div class="empty">No trains in view. Zoom out or move the map.</div>'}
+    ${more > 0 ? `<p class="note">Showing the ${items.length} most late. Zoom in to see the other ${more}.</p>` : ''}</div>`, {
+    train: (id) => { const t = items.find((x) => x.id === id); if (t) trainSheet(t); }
+  });
+}
+document.getElementById('map-count').addEventListener('click', listSheet);
+
 function groupSheet(items) {
   const here = items[0].last;
   const rows = [...items].sort((a, b) => RANK[b.band] - RANK[a.band] || (b.delay ?? 0) - (a.delay ?? 0)).map((t) => {
@@ -137,7 +159,7 @@ function groupSheet(items) {
 }
 
 // ---------- the train screen: from, to, next stop, on time, every stop ----------
-async function trainSheet(t) {
+export async function trainSheet(t) {
   clearInterval(sheetTimer);
   let d = null;
   let detailed = false;
@@ -184,14 +206,22 @@ async function trainSheet(t) {
       ${next}
       ${last ? `<p class="lastseen">${esc(last.event || 'Seen')} ${esc(last.name)}${last.at ? ' at ' + hhmm(last.at) : ''}</p>` : ''}
       ${extras.length ? `<p class="lastseen">${extras.join(' · ')}</p>` : ''}
-      <div class="sheet-body">${!d ? '<div class="empty">Loading stops…</div>' : stops + toggle + source}</div>`;
+      <div class="sheet-body">${!d ? '<div class="empty">Loading stops…</div>' : stops + toggle + source}</div>
+      ${d && d.stops && routeFromStops(d.stops) ? '<div class="sheet-actions one"><button data-act="route">Make this my route</button></div>' : ''}`;
   };
   const load = async () => {
     d = await api.train(t.id).catch(() => null);
     if (d && d.error) d = null;
     if (sheetOpen()) updateSheet(html());
   };
-  openSheet(html(), { detail: () => { detailed = !detailed; updateSheet(html()); } }, () => clearInterval(sheetTimer));
+  openSheet(html(), {
+    detail: () => { detailed = !detailed; updateSheet(html()); },
+    route: () => {
+      const origin = (d && d.origin) || t.origin, dest = (d && d.dest) || t.dest;
+      const r = routeFromStops(d && d.stops, origin && dest ? `${origin} – ${dest}` : null);
+      if (r) { closeCustomSheet(); window.dispatchEvent(new CustomEvent('mtt:route', { detail: { route: r, train: t.code } })); }
+    }
+  }, () => clearInterval(sheetTimer));
   load();
   sheetTimer = setInterval(load, 30000);
 }
@@ -229,7 +259,8 @@ export async function stationSheet(crs, type = 'dep') {
     <div class="sheet-actions">
       <button data-act="watch">${areas.some((a) => a.crs === crs) ? 'Watching area' : 'Watch this area'}</button>
       <button data-act="save">${saved.some((s) => s.crs === crs) ? 'Saved' : 'Save station'}</button>
-    </div>`;
+    </div>
+    <div class="sheet-actions one"><button data-act="build">Build a route from here</button></div>`;
   async function load() {
     data = await api.board(crs, current).catch((e) => ({ error: e.message }));
     if (sheetOpen()) updateSheet(html());
@@ -237,6 +268,7 @@ export async function stationSheet(crs, type = 'dep') {
   openSheet(html(), {
     type: (t) => { current = t; data = null; updateSheet(html()); load(); },
     watch: () => { watchArea(st); updateSheet(html()); },
+    build: () => { closeCustomSheet(); window.dispatchEvent(new CustomEvent('mtt:build', { detail: { crs } })); },
     save: () => {
       const list = loadList(STATIONS_KEY);
       if (!list.some((s) => s.crs === crs)) { list.unshift({ crs, name: st.name }); saveList(STATIONS_KEY, list.slice(0, 12)); toast(`${st.name} saved to Boards`); }
