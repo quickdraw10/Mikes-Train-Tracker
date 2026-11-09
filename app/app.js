@@ -75,7 +75,13 @@ function findTrain(code) {
 // ---------- A: signal box panel ----------
 // Design A, drawn like a signaller's IECC screen: black background, grey track,
 // occupied track lit white, headcodes in boxes coloured by delay, tiny signal heads.
-const PW = 760; // the panel is drawn landscape
+const PW = 760; // the panel is drawn landscape, at least this wide
+// width-to-height of the space the panel gets: the screen in landscape, the long side in portrait
+function panelAspect() {
+  const w = window.innerWidth, h = window.innerHeight;
+  if (w > h) return Math.max(1.6, (w - 24) / Math.max(200, h - 70 - 52));
+  return Math.max(1.6, (h - 260) / Math.max(200, w - 24));
+}
 
 function panelChips() {
   return `<div class="pchips" role="tablist" aria-label="Choose a signal panel">${ui.view.panels.map((x, i) => `<button role="tab" class="pchip" data-panel="${i}" aria-selected="${i === ui.panel}">${esc(x.name)}</button>`).join('')}</div>`;
@@ -94,13 +100,18 @@ function renderPanel() {
   }
 
   const n = p.tracks.length;
-  const W = PW, cols = p.cols || 8, edges = p.edges || null;
-  const M = edges ? 66 : 16;                         // side margins: trains further out are listed there
-  const cw = (W - 2 * M) / cols, bw = Math.min(34, cw - 6);
-  const cx = (c) => M + (c + 0.5) * cw;
+  const cols = p.cols || 8, edges = p.edges || null;
   const ROW = 30, TOPY = 52;
   const rowY = (i) => TOPY + i * ROW + ROW / 2;
   const H = TOPY + n * ROW + 34;
+  // as wide as the screen allows, and only the columns that have track in them,
+  // so the station spreads right across the panel
+  const W = Math.max(PW, Math.round(H * panelAspect()));
+  const used = [...new Set(p.tracks.flatMap((t) => t.berths.map((b) => b.col)))].sort((a, b) => a - b);
+  const slot = new Map(used.map((c, i) => [c, i]));
+  const M = edges ? 66 : 16;                         // side margins: trains further out are listed there
+  const cw = (W - 2 * M) / Math.max(1, used.length), bw = Math.min(34, cw - 6);
+  const cx = (c) => M + ((slot.get(c) ?? 0) + 0.5) * cw;
   const L = 6, R = W - 6;
   let g = '';
 
@@ -114,13 +125,7 @@ function renderPanel() {
     if (maxCol < cols - 1) g += `<line x1="${end}" y1="${rowY(i) - 5}" x2="${end}" y2="${rowY(i) + 5}" class="tk"/>`;
   });
 
-  // switches between roads, straight from Network Rail's berth stepping data
-  for (const l of p.links || []) {
-    const [a, b] = l.split('>').map((x) => x.split(':').map(Number));
-    g += `<path d="M${cx(a[1]) + bw / 2} ${rowY(a[0])} L${cx(b[1]) - bw / 2} ${rowY(b[0])}" class="tk sw"/>`;
-  }
-
-  if (!p.links || !p.links.length) {
+  if (!edges) {
     // demo layout: each road fans into the main lines at both ends
     const lx = cx(0) - cw / 2 - 4, rx = cx(cols - 1) + cw / 2 + 4, mains = 4;
     const mainY = (k) => TOPY + (n * ROW) * (k + 0.5) / mains;
@@ -146,7 +151,7 @@ function renderPanel() {
   if (edges) {
     p.tracks.forEach((t, i) => {
       for (const b of t.berths) {
-        if (b.col !== 0 && b.col !== cols - 1) continue;
+        if (b.col !== 0 && b.col !== cols - 1) continue; // only the outermost approaches have trains beyond
         const list = edges[i + ':' + b.col];
         if (!list || !list.length) continue;
         const left = b.col === 0, y = rowY(i);
@@ -191,7 +196,7 @@ function renderPanel() {
   return `${head}
     <p class="turn-hint">Turn your phone sideways for the panel</p>
     <div class="landbox"><div class="iecc-wrap land" data-aspect="${(W / H).toFixed(4)}"><svg class="iecc" viewBox="0 0 ${W} ${H}" role="img" aria-label="Signal panel for ${esc(p.name)}">${g}</svg></div></div>
-    <p class="note">Tap a headcode for that train. ${edges ? 'Switches between lines come from Network Rail\'s berth data. Trains further out are listed at each edge, nearest first. ' : ''}Pinch to zoom in.</p>
+    <p class="note">Tap a headcode for that train. ${edges ? 'Trains further out are listed at each edge, nearest first. ' : ''}Pinch to zoom in.</p>
     ${legend()}
     <section class="list"><div class="list-h">Late on this panel</div>${late}</section>`;
 }
@@ -423,7 +428,12 @@ function fitPanel() {
     Object.assign(wrap.style, { position: '', top: '', left: '', width: '', margin: '', transformOrigin: '', transform: '' });
   }
 }
-window.addEventListener('resize', () => { if (ui.tab === 'panel') fitPanel(); });
+let lastShape = '';
+window.addEventListener('resize', () => {
+  if (ui.tab !== 'panel') return;
+  const shape = window.innerWidth > window.innerHeight ? 'l' : 'p';
+  if (shape !== lastShape) { lastShape = shape; render(); } else fitPanel();
+});
 
 // ---------- render & events ----------
 function render() {
