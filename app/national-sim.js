@@ -101,7 +101,7 @@ export function createNationalSim(count = 900) {
     const p = position(t, now);
     return {
       id: t.code, code: t.code, toc: t.toc, delay: t.delay, cancelled: t.cancelled, band: band(t),
-      lat: p.lat, lon: p.lon, last: p.from.name, next: p.to.name,
+      lat: p.lat, lon: p.lon, last: p.from.name, lastEvent: 'Departed', next: p.to.name,
       origin: t.path[0].name, dest: t.path[t.path.length - 1].name
     };
   }
@@ -115,6 +115,30 @@ export function createNationalSim(count = 900) {
     const local = pts.filter((p) => inBox(p.lat, p.lon, box));
     if (!local.length) return;
     for (let i = have; i < want; i++) spawn(now, 'near', pick(local));
+  }
+
+  // Train screen details in the same shape as the live service's /api/train/:id
+  function train(id, now = Date.now()) {
+    const t = trains.find((x) => x.code === id);
+    if (!t) return { error: 'This train is no longer being tracked.' };
+    const hm = (ms) => new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' });
+    // Booked times: work back from the current leg using each leg's running time
+    const times = [];
+    let at = t.legStart - t.delay * 60000;
+    times[t.leg] = at;
+    for (let i = t.leg - 1; i >= 0; i--) { const a = t.path[i], b = t.path[i + 1]; at -= Math.max(2, km(a.lat, a.lon, b.lat, b.lon) / 1.3) * 60000 + 60000; times[i] = at; }
+    at = times[t.leg];
+    for (let i = t.leg + 1; i < t.path.length; i++) { const a = t.path[i - 1], b = t.path[i]; at += Math.max(2, km(a.lat, a.lon, b.lat, b.lon) / 1.3) * 60000 + (i > t.leg + 1 ? 60000 : 0); times[i] = at; }
+    const stops = t.path.map((p, i) => {
+      const passed = i <= t.leg;
+      return { name: p.name, booked: hm(times[i]), platform: String(1 + (p.crs.charCodeAt(0) + i) % 6), state: passed ? 'passed' : 'due',
+        actual: passed ? times[i] + t.delay * 60000 : null, expected: passed ? null : hm(times[i] + t.delay * 60000) };
+    });
+    return {
+      mode: 'demo', id: t.code, code: t.code, delay: t.delay, cancelled: t.cancelled, operator: t.toc, matched: true, passenger: true,
+      origin: t.path[0].name, dest: t.path[t.path.length - 1].name, next: stops[t.leg + 1] || null, stops,
+      last: { name: t.path[t.leg].name, event: 'Departed', at: times[t.leg] + t.delay * 60000 }
+    };
   }
 
   function trainsIn(box, now = Date.now()) {
@@ -164,5 +188,5 @@ export function createNationalSim(count = 900) {
   const start = Date.now() - 20 * 60000;
   for (let i = 0; i < count; i++) spawn(start, true);
   for (let s = 0; s <= 20; s++) tick(start + s * 60000);
-  return { tick, trains: trainsIn, board, moves };
+  return { tick, trains: trainsIn, board, moves, train };
 }

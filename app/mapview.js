@@ -63,25 +63,24 @@ async function loadTrains() {
   loading = false;
 }
 
+let lastRes = null;
 function drawTrains(res) {
+  lastRes = res;
   trainLayer.clearLayers();
   const z = map.getZoom();
   const list = res.trains || [];
-  for (const t of list) {
-    const c = COLORS[t.band] || COLORS.none;
-    let m;
-    if (z >= CHIP_ZOOM) {
-      const icon = L.divIcon({
-        className: 'tchip-wrap',
-        html: `<span class="tchip"><b>${esc(t.code)}</b><i style="background:${c}">${esc(shortLate(t.delay, t.cancelled))}</i></span>`,
-        iconSize: null, iconAnchor: [0, 14]
-      });
-      m = L.marker([t.lat, t.lon], { icon, keyboard: true, title: `${t.code} ${lateText(t.delay, t.cancelled)}` });
-    } else {
-      m = L.circleMarker([t.lat, t.lon], { radius: z <= 7 ? 3 : 5, color: '#0C1B38', weight: 1, fillColor: c, fillOpacity: 0.95 });
+  if (z >= CHIP_ZOOM) {
+    // Trains drawn on top of each other (e.g. waiting at the same station) become one bubble
+    for (const group of groupByScreen(list, 34)) {
+      if (group.length === 1) drawChip(group[0]);
+      else drawGroup(group);
     }
-    m.on('click', () => trainSheet(t));
-    m.addTo(trainLayer);
+  } else {
+    for (const t of list) {
+      const c = COLORS[t.band] || COLORS.none;
+      L.circleMarker([t.lat, t.lon], { radius: z <= 7 ? 3 : 5, color: '#0C1B38', weight: 1, fillColor: c, fillOpacity: 0.95 })
+        .on('click', () => trainSheet(t)).addTo(trainLayer);
+    }
   }
   const count = document.getElementById('map-count');
   const shown = list.length < (res.total || 0) ? `${list.length} of ${res.total}` : `${list.length}`;
@@ -89,13 +88,93 @@ function drawTrains(res) {
   count.innerHTML = `<span class="pill ${res.mode === 'live' ? 'live' : 'demo'}">${res.mode === 'live' ? 'Live' : 'Demo'}</span> ${shown} train${res.total === 1 ? '' : 's'} in view · <span class="c-mid">${late} late</span>${list.length < (res.total || 0) ? ' · zoom in for all' : ''}`;
 }
 
-function trainSheet(t) {
-  const bd = bandOf(t.delay, t.cancelled);
-  const where = t.next ? `${esc(t.lastEvent || 'Departed')} ${esc(t.last)}${t.lastAt ? ' at ' + hhmm(t.lastAt) : ''} · next ${esc(t.next)}` : `${esc(t.lastEvent || 'At')} ${esc(t.last)}${t.lastAt ? ' at ' + hhmm(t.lastAt) : ''}`;
-  const route = t.origin && t.dest ? `${esc(t.origin)} → ${esc(t.dest)}` : 'Train ' + esc(t.code);
-  openSheet(`<div class="sheet-top"><div class="big b-${bd}">${esc(shortLate(t.delay, t.cancelled))}</div>
-    <div><div class="meta">${esc(t.code)}${t.toc ? ' · ' + esc(t.toc) : ''}</div><h2 id="sheet-title">${route}</h2><p>${esc(lateText(t.delay, t.cancelled))}</p></div></div>
-    <p>${where}</p>`);
+function groupByScreen(list, px) {
+  const groups = [];
+  for (const t of list) {
+    const pt = map.latLngToContainerPoint([t.lat, t.lon]);
+    const g = groups.find((x) => Math.abs(x.pt.x - pt.x) < px * 3.4 && Math.abs(x.pt.y - pt.y) < px * 1.2);
+    if (g) g.items.push(t); else groups.push({ pt, items: [t] });
+  }
+  return groups.map((g) => g.items);
+}
+
+const RANK = { bad: 3, mid: 2, ok: 1, none: 0 };
+function drawChip(t) {
+  const c = COLORS[t.band] || COLORS.none;
+  const icon = L.divIcon({
+    className: 'tchip-wrap',
+    html: `<span class="tchip"><b>${esc(t.code)}</b><i style="background:${c}">${esc(shortLate(t.delay, t.cancelled))}</i></span>`,
+    iconSize: null, iconAnchor: [0, 14]
+  });
+  L.marker([t.lat, t.lon], { icon, keyboard: true, title: `${t.code} ${lateText(t.delay, t.cancelled)}` })
+    .on('click', () => trainSheet(t)).addTo(trainLayer);
+}
+
+function drawGroup(items) {
+  const worst = items.reduce((w, t) => (RANK[t.band] > RANK[w.band] ? t : w), items[0]);
+  const late = items.filter((t) => t.band === 'mid' || t.band === 'bad').length;
+  const lat = items.reduce((s, t) => s + t.lat, 0) / items.length, lon = items.reduce((s, t) => s + t.lon, 0) / items.length;
+  const icon = L.divIcon({
+    className: 'tchip-wrap',
+    html: `<span class="tgroup"><b>${items.length} trains</b>${late ? `<i style="background:${COLORS[worst.band]}">${late} late</i>` : ''}</span>`,
+    iconSize: null, iconAnchor: [0, 14]
+  });
+  L.marker([lat, lon], { icon, keyboard: true, title: `${items.length} trains here` })
+    .on('click', () => groupSheet(items)).addTo(trainLayer);
+}
+
+function groupSheet(items) {
+  const here = items[0].last;
+  const rows = [...items].sort((a, b) => RANK[b.band] - RANK[a.band] || (b.delay ?? 0) - (a.delay ?? 0)).map((t) => {
+    const bd = bandOf(t.delay, t.cancelled);
+    return `<button class="row" data-act="train" data-arg="${esc(t.id)}"><span class="hc b-${bd}">${esc(t.code)}</span>
+      <span class="what">${esc(t.dest ? 'to ' + t.dest : t.next ? 'next ' + t.next : 'at ' + t.last)}</span><span class="mins c-${bd}">${esc(shortLate(t.delay, t.cancelled))}</span></button>`;
+  }).join('');
+  openSheet(`<div class="st-head"><div><div class="meta">${items.length} trains</div><h2 id="sheet-title">${esc(here ? 'At or near ' + here : 'Trains here')}</h2></div></div>
+    <div class="sheet-body list flush">${rows}</div>`, {
+    train: (id) => { const t = items.find((x) => x.id === id); if (t) trainSheet(t); }
+  });
+}
+
+// ---------- the train screen: from, to, next stop, on time, every stop ----------
+async function trainSheet(t) {
+  clearInterval(sheetTimer);
+  let d = null;
+  const html = () => {
+    const delay = d ? d.delay : t.delay, cancelled = d ? d.cancelled : t.cancelled;
+    const bd = bandOf(delay, cancelled);
+    const origin = (d && d.origin) || t.origin, dest = (d && d.dest) || t.dest;
+    const title = origin && dest ? `${esc(origin)} → ${esc(dest)}` : dest ? `To ${esc(dest)}` : origin ? `From ${esc(origin)}` : 'Train ' + esc(t.code);
+    const op = (d && d.operator) || t.toc;
+    let next = '';
+    if (d && d.next) {
+      next = `<div class="nextstop"><span class="lbl">Next stop</span><b>${esc(d.next.name)}</b><span class="c-${bd}">${d.next.expected && d.next.expected !== d.next.booked ? `exp ${esc(d.next.expected)} <s>${esc(d.next.booked)}</s>` : esc(d.next.booked || '')}${d.next.platform ? ' · Plat ' + esc(d.next.platform) : ''}</span></div>`;
+    } else if (d && d.terminated) {
+      next = `<div class="nextstop"><span class="lbl">Journey</span><b>Arrived at ${esc(dest || t.last)}</b></div>`;
+    } else if (!d || !d.matched) {
+      const nx = (d && d.nextReport) || t.next;
+      next = `<div class="nextstop"><span class="lbl">${nx ? 'Next timing point' : 'Last seen'}</span><b>${esc(nx || t.last || '–')}</b></div>`;
+    }
+    const last = (d && d.last) || (t.last ? { name: t.last, event: t.lastEvent, at: t.lastAt } : null);
+    const stops = d && d.stops && d.stops.length ? `<div class="stops">${d.stops.map((s) => {
+      const cls = s.state === 'passed' ? 'passed' : (d.next && s === d.next) || (d.next && s.name === d.next.name) ? 'next' : '';
+      const right = s.state === 'passed' ? (s.actual ? hhmm(s.actual) : '✓') : (s.expected && s.expected !== s.booked ? `<span class="c-${bd}">${esc(s.expected)}</span>` : 'On time');
+      return `<div class="stop ${cls}"><i></i><span class="sn">${esc(s.name)}${s.platform ? `<small>Plat ${esc(s.platform)}</small>` : ''}</span><span class="sb">${esc(s.booked || '')}</span><span class="sa">${d.cancelled && s.state !== 'passed' ? '<span class="c-bad">Canc</span>' : right}</span></div>`;
+    }).join('')}</div>` : (d && d.note ? `<p class="note">${esc(d.note)}</p>` : '');
+    return `<div class="sheet-top"><div class="big b-${bd}">${esc(shortLate(delay, cancelled))}</div>
+      <div><div class="meta">${esc(t.code)}${op ? ' · ' + esc(op) : ''}</div><h2 id="sheet-title">${title}</h2><p class="c-${bd === 'none' ? 'none' : bd}">${esc(lateText(delay, cancelled))}</p></div></div>
+      ${next}
+      ${last ? `<p class="lastseen">${esc(last.event || 'Seen')} ${esc(last.name)}${last.at ? ' at ' + hhmm(last.at) : ''}</p>` : ''}
+      <div class="sheet-body">${!d ? '<div class="empty">Loading stops…</div>' : stops}</div>`;
+  };
+  const load = async () => {
+    d = await api.train(t.id).catch(() => null);
+    if (d && d.error) d = null;
+    if (sheetOpen()) updateSheet(html());
+  };
+  openSheet(html(), {}, () => clearInterval(sheetTimer));
+  load();
+  sheetTimer = setInterval(load, 30000);
 }
 
 // ---------- stations ----------

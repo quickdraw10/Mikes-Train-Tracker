@@ -4,7 +4,16 @@
 
 import assert from 'node:assert/strict';
 import { ROUTES } from '../app/layout.js';
-import { emptyState, buildView, signalState } from '../app/model.js';
+import { emptyState, buildView as realBuildView, signalState } from '../app/model.js';
+
+// A small panel in area VC for these tests (the app's own panel is York)
+const TEST_PANEL = { id: 't', name: 'Test', subtitle: '', area: 'VC', ends: ['A', 'B'], tracks: [
+  { name: 'DF', dir: 'down', berths: ['0101', '0103', '0105', '0107', '0109'] },
+  { name: 'UF', dir: 'up', berths: ['0102', '0104', '0106', '0108', '0110'] },
+  { name: 'DS', dir: 'down', berths: ['0201', '0203', '0205', '0207', '0209'] },
+  { name: 'US', dir: 'up', berths: ['0202', '0204', '0206', '0208', '0210'] }
+] };
+const buildView = (raw, now = Date.now()) => realBuildView(raw, now, [TEST_PANEL]);
 import { handleSClass } from './sclass.js';
 import { createDecoder } from './decode.js';
 import { handleTd } from './td.js';

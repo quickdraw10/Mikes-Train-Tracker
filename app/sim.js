@@ -5,9 +5,9 @@
 import { PANELS, ROUTES } from './layout.js';
 import { emptyState, train } from './model.js';
 
-const DOWN_DESC = ['Victoria → Brighton', 'Victoria → Gatwick Airport', 'Victoria → Littlehampton', 'Bedford → Brighton', 'Victoria → Caterham'];
-const UP_DESC = ['Brighton → Victoria', 'Gatwick Airport → Victoria', 'East Croydon → Victoria', 'Caterham → Victoria', 'Brighton → Bedford'];
-const PREFIX = ['1J', '2C', '1X', '9C', '2T', '1H', '2S', '9U'];
+const DOWN_DESC = ['London King\'s Cross → Edinburgh', 'Leeds → Scarborough', 'Manchester Airport → Newcastle', 'Plymouth → Edinburgh', 'Hull → Scarborough', 'London King\'s Cross → Newcastle'];
+const UP_DESC = ['Edinburgh → London King\'s Cross', 'Scarborough → Leeds', 'Newcastle → Manchester Airport', 'Aberdeen → Plymouth', 'Harrogate → Leeds', 'Newcastle → Birmingham New Street'];
+const PREFIX = ['1S', '1E', '1N', '2C', '1P', '2H', '1V', '2R'];
 
 function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
 function randomDelay() {
@@ -32,7 +32,7 @@ export function createSim() {
     const t = train(raw, code);
     t.delay = randomDelay();
     t.desc = pick(dir === 'down' ? DOWN_DESC : UP_DESC);
-    t.toc = code.startsWith('9') ? 'Thameslink' : code.startsWith('1X') ? 'Gatwick Express' : 'Southern';
+    t.toc = pick(['LNER', 'TransPennine Express', 'Northern', 'CrossCountry', 'Grand Central']);
     return t;
   }
   function retire(code) {
@@ -50,27 +50,30 @@ export function createSim() {
       for (const tr of p.tracks) {
         const key = p.id + ':' + tr.name;
         const list = (panelTrains[key] ||= []);
-        const n = tr.berths.length;
+        // Berth ids in the order this road's trains travel through them
+        const ids = tr.berths.map((b) => (typeof b === 'string' ? b : b.id));
+        const order = tr.dir === 'up' ? [...ids].reverse() : ids;
+        const n = order.length;
         // move front trains first so they free the berth behind
         list.sort((a, b) => b.i - a.i);
         for (const pt of [...list]) {
           if (Math.random() > 0.45) continue;
           const next = pt.i + 1;
-          delete raw.berths[p.area + ':' + tr.berths[pt.i]];
+          delete raw.berths[p.area + ':' + order[pt.i]];
           if (next >= n) { list.splice(list.indexOf(pt), 1); retire(pt.code); continue; }
-          if (list.some((o) => o.i === next)) { raw.berths[p.area + ':' + tr.berths[pt.i]] = pt.code; continue; }
+          if (list.some((o) => o.i === next)) { raw.berths[p.area + ':' + order[pt.i]] = pt.code; continue; }
           pt.i = next;
-          raw.berths[p.area + ':' + tr.berths[pt.i]] = pt.code;
+          raw.berths[p.area + ':' + order[pt.i]] = pt.code;
         }
         if (!list.some((o) => o.i <= 1) && list.length < 3 && Math.random() < 0.3) {
           const t = newTrain(tr.dir);
           list.push({ code: t.code, i: 0 });
-          raw.berths[p.area + ':' + tr.berths[0]] = t.code;
+          raw.berths[p.area + ':' + order[0]] = t.code;
         }
         // Automatic signals: each berth's signal is on (red) while the berth beyond it is occupied
         raw.signals ||= {};
-        tr.berths.forEach((b, i) => {
-          const ahead = tr.berths[i + 1];
+        order.forEach((b, i) => {
+          const ahead = order[i + 1];
           raw.signals[p.area + ':' + b] = ahead && raw.berths[p.area + ':' + ahead] ? 'on' : 'off';
         });
       }

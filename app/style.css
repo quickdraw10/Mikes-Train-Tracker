@@ -198,3 +198,56 @@ body[data-tab="map"] { overflow: hidden; }
 
 /* OpenStreetMap tiles turned into a dark map, then let the navy show through */
 .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.92) saturate(0.55); opacity: 0.78; }
+
+/* ---------- York panel, IECC screen style ---------- */
+.iecc-wrap { margin: 0 12px; padding: 2px; border-radius: 12px; background: #030406; box-shadow: inset 0 0 0 1.5px var(--trim), 0 8px 24px rgba(0,0,0,0.45); overflow: hidden; }
+.iecc { display: block; width: 100%; height: auto; }
+.iecc .tk { stroke: #59606B; stroke-width: 2.4; fill: none; stroke-linecap: round; }
+.iecc .i-occ { stroke: #F2F4F7; stroke-width: 2.8; stroke-linecap: round; }
+.iecc .i-occglow { stroke: rgba(255,255,255,0.2); stroke-width: 7; stroke-linecap: round; }
+.iecc .i-plat { fill: #2E3442; }
+.iecc .pnum { fill: #B98CFF; font: 700 7.5px var(--mono); }
+.iecc .stem { stroke: #59606B; stroke-width: 1.5; }
+.iecc .sg { stroke: #030406; stroke-width: 1; }
+.iecc .sg.on { fill: #FF3B30; }
+.iecc .sg.off { fill: #34D058; }
+.iecc .sg.unk { fill: #030406; stroke: #4A5160; }
+.iecc .berth-empty { fill: none; stroke: #161A22; stroke-width: 1; }
+.iecc .hcbox { cursor: pointer; }
+.iecc .hcbox rect { fill: #030406; stroke-width: 1.5; }
+.iecc .hcbox text { font: 700 10px var(--mono); }
+.iecc .hcbox.b-ok rect { stroke: var(--ok); } .iecc .hcbox.b-ok text { fill: var(--ok); }
+.iecc .hcbox.b-mid rect { stroke: var(--mid); } .iecc .hcbox.b-mid text { fill: var(--mid); }
+.iecc .hcbox.b-bad rect { stroke: var(--bad); } .iecc .hcbox.b-bad text { fill: var(--bad); }
+.iecc .hcbox.b-none rect { stroke: #C9D3E8; } .iecc .hcbox.b-none text { fill: #E6EAF0; }
+.iecc .hcbox:focus { outline: none; } .iecc .hcbox:focus-visible rect { stroke: var(--trim); stroke-width: 2.5; }
+.iecc .lbl { fill: #B98CFF; font: 700 8.5px var(--mono); letter-spacing: 0.04em; }
+.iecc .lbl.big { font-size: 13px; letter-spacing: 0.3em; }
+.iecc .lbl.small { font-size: 8px; fill: #8F7BBA; }
+.iecc .clock { fill: #E3B53A; font: 700 9px var(--mono); }
+.iecc-empty { padding: 40px 20px; text-align: center; color: #B98CFF; font: 600 14px var(--mono); }
+
+/* ---------- grouped trains and the train screen ---------- */
+.tgroup { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 4px 0 9px; border-radius: 14px; background: var(--navy); color: #FFFFFF; box-shadow: 0 0 0 1.5px var(--trim), 0 3px 10px rgba(0,0,0,0.5); white-space: nowrap; transform: translate(-4px, 0); cursor: pointer; }
+.tgroup b { font: 700 12px var(--body); }
+.tgroup i { font-style: normal; font: 700 11px var(--body); color: #0B0D12; padding: 2px 7px; border-radius: 10px; }
+.list.flush { margin: 0 -20px; background: none; box-shadow: none; border-radius: 0; }
+.nextstop { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; column-gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--navy); color: #FFFFFF; box-shadow: inset 0 0 0 1.5px var(--trim); }
+.nextstop .lbl { grid-column: 1 / 3; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--trim); }
+.nextstop b { font: 700 18px var(--display); }
+.nextstop span:last-child { justify-self: end; align-self: center; font: 700 13px var(--mono); white-space: nowrap; }
+.nextstop span.c-ok { color: #B5CBF5; }
+.nextstop s { color: #8FA0C8; font-weight: 600; margin-left: 4px; }
+.lastseen { margin: 0; font-size: 13px; color: var(--text2); }
+.stops { position: relative; padding: 4px 0 6px; }
+.stop { position: relative; display: grid; grid-template-columns: 22px minmax(0, 1fr) 50px 60px; gap: 6px; align-items: center; min-height: 40px; }
+.stop i { justify-self: center; width: 11px; height: 11px; border-radius: 6px; background: var(--bg); box-shadow: inset 0 0 0 2.5px var(--text2); z-index: 1; }
+.stop::before { content: ""; position: absolute; left: 10px; top: 0; bottom: 0; width: 3px; background: var(--line); }
+.stop:first-child::before { top: 50%; } .stop:last-child::before { bottom: 50%; }
+.stop.passed::before { background: var(--ok); } .stop.passed i { background: var(--ok); box-shadow: none; }
+.stop.next i { width: 15px; height: 15px; border-radius: 8px; background: var(--trim); box-shadow: 0 0 0 4px rgba(227,181,58,0.25); }
+.stop .sn { display: flex; flex-direction: column; font-weight: 600; font-size: 15px; min-width: 0; overflow-wrap: anywhere; }
+.stop.passed .sn { color: var(--text2); font-weight: 500; }
+.stop .sn small { font-size: 11px; font-weight: 500; color: var(--text2); }
+.stop .sb { font: 600 13px var(--mono); color: var(--text2); text-align: right; }
+.stop .sa { font: 700 13px var(--mono); text-align: right; }

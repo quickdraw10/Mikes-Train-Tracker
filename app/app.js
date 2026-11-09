@@ -63,59 +63,85 @@ function findTrain(code) {
 }
 
 // ---------- A: signal box panel ----------
+// Design A, drawn like a signaller's IECC screen: black background, grey track,
+// occupied track lit white, headcodes in boxes coloured by delay, tiny signal heads.
+const SVGW = 400, COLW = 41, X0 = 56, ROWH = 32, TOP = 56;
+const colX = (c) => X0 + c * COLW;
+
 function renderPanel() {
   const p = ui.view.panels[ui.panel];
-  const pairs = Math.ceil(p.tracks.length / 2);
-  const ys = p.tracks.map((_, i) => 80 + Math.floor(i / 2) * 150 + (i % 2) * 74);
-  const height = 80 + (pairs - 1) * 150 + 74 + 80;
-  const n = Math.max(...p.tracks.map((t) => t.berths.length));
-  const x = (f) => `calc(40px + (100% - 66px) * ${f})`;
-
-  let html = '';
-  for (const [l, t] of [['8px', '8px'], ['auto', '8px'], ['8px', 'auto'], ['auto', 'auto']]) {
-    html += `<span class="screw" style="left:${l === 'auto' ? 'auto' : l};right:${l === 'auto' ? '8px' : 'auto'};top:${t === 'auto' ? 'auto' : t};bottom:${t === 'auto' ? '8px' : 'auto'}"></span>`;
-  }
-  html += `<div class="ends"><span>◀ ${esc(p.ends[0])}</span><span>${esc(p.ends[1])} ▶</span></div>`;
-  for (const pl of p.platforms || []) {
-    const [a, b] = pl.between;
-    html += `<div class="plat" style="left:${x(pl.from / n)};width:calc((100% - 66px) * ${(pl.to - pl.from) / n});top:${ys[a] + 23}px;height:${ys[b] - ys[a] - 46}px">${esc(pl.label)}</div>`;
-  }
-  p.tracks.forEach((t, i) => {
-    const y = ys[i];
-    html += `<div class="track" style="top:${y}px"></div><div class="tname" style="top:${y - 7}px">${esc(t.name)}</div>`;
-    t.berths.forEach((b, j) => {
-      const f = (j + 0.5) / n;
-      const top = t.dir === 'down' ? y - 30 : y + 9;
-      // Signal at the far end of the berth, on the other side of the track from the headcode box
-      const sf = t.dir === 'down' ? (j + 1) / n : j / n;
-      const sigTop = t.dir === 'down' ? y + 9 : y - 19;
-      const sigCls = b.signal === 'on' ? 'on' : b.signal === 'off' ? 'off' : 'unk';
-      const sigText = b.signal === 'on' ? 'on (red)' : b.signal === 'off' ? 'off (clear)' : 'state not known yet';
-      if (j < t.berths.length - 1 || b.signal) {
-        html += `<span class="post" style="left:${x(sf)};top:${t.dir === 'down' ? y + 3 : y - 9}px"></span>`;
-        html += `<span class="sig ${sigCls}" style="left:${x(sf)};top:${sigTop}px" role="img" aria-label="Signal ${esc(p.area + b.id)} ${sigText}" title="Signal ${esc(p.area + b.id)}"></span>`;
-      }
-      if (b.code) {
-        html += `<div class="occ glow b-${b.band}" style="left:${x(f)};top:${y - 1}px;width:calc((100% - 66px) / ${n} * 0.85)"></div>`;
-        html += `<button class="berth has b-${b.band}" data-train="${esc(b.code)}" style="left:${x(f)};top:${top}px" aria-label="${esc(b.code)} on ${esc(t.name)}, ${esc(lateText(b.delay))}">${esc(b.code)}</button>`;
-      } else {
-        html += `<span class="berth" style="left:${x(f)};top:${top}px" title="Berth ${esc(b.id)}"></span>`;
-      }
-    });
-  });
-  html += `<div class="panel-foot">TD AREA ${esc(p.area)} · BERTHS STEP AS SIGNALS CLEAR</div>`;
-
-  const late = p.late.length
-    ? p.late.map((t) => `<button class="row" data-train="${esc(t.code)}"><span class="hc b-${band(t)}">${esc(t.code)}</span><span class="what">${esc(t.desc || 'On ' + t.track)}</span><span class="mins c-${band(t)}">${esc(shortLate(t.delay, t.cancelled))}</span></button>`).join('')
-    : `<div class="empty">Nothing running late here right now.</div>`;
-
+  if (!p) return '';
   const quiet = p.quietMins === null
     ? `<div class="sub"><span class="pill wait">Waiting for area ${esc(p.area)}</span></div>`
     : p.quietMins >= 5 ? `<div class="sub"><span class="pill wait c-bad">No signalling messages from ${esc(p.area)} for ${p.quietMins} min</span></div>` : '';
+  const head = `<header class="head"><h1>${esc(p.name)}</h1><div class="sub">${esc(p.subtitle)}</div><div class="sub">${statusLine(ui.view)}</div>${quiet}</header>`;
+  if (!p.tracks.length) {
+    return head + `<div class="iecc-wrap"><div class="iecc-empty">${esc(p.note || 'Building the York layout from Network Rail\'s berth data…')}</div></div>`;
+  }
 
-  return `
-    <header class="head"><h1>${esc(p.name)}</h1><div class="sub">${esc(p.subtitle)}</div><div class="sub">${statusLine(ui.view)}</div>${quiet}</header>
-    <div class="panel" style="height:${height}px" role="img" aria-label="Signal box panel for ${esc(p.name)}">${html}</div>
+  const n = p.tracks.length;
+  const H = TOP + n * ROWH + 44;
+  const rowY = (i) => TOP + i * ROWH + ROWH / 2;
+  const L = 6, R = SVGW - 6, lx = colX(0) - COLW / 2 - 4, rx = colX(7) + COLW / 2 + 4;
+  let g = '';
+
+  // throats: each road fans into the main lines at both ends
+  const mains = 4;
+  const mainY = (k) => TOP + (n * ROWH) * (k + 0.5) / mains;
+  p.tracks.forEach((t, i) => {
+    const k = Math.min(mains - 1, Math.floor(i * mains / n));
+    const minCol = Math.min(...t.berths.map((b) => b.col)), maxCol = Math.max(...t.berths.map((b) => b.col));
+    const start = colX(minCol) - COLW / 2, end = colX(maxCol) + COLW / 2;
+    if (minCol === 0) g += `<path d="M${L + 12} ${mainY(k)} L${lx} ${rowY(i)}" class="tk"/>`;
+    if (maxCol === 7) g += `<path d="M${rx} ${rowY(i)} L${R - 12} ${mainY(k)}" class="tk"/>`;
+    g += `<line x1="${start}" y1="${rowY(i)}" x2="${end}" y2="${rowY(i)}" class="tk"/>`;
+    if (minCol > 0) g += `<line x1="${start}" y1="${rowY(i) - 5}" x2="${start}" y2="${rowY(i) + 5}" class="tk"/>`;
+    if (maxCol < 7) g += `<line x1="${end}" y1="${rowY(i) - 5}" x2="${end}" y2="${rowY(i) + 5}" class="tk"/>`;
+  });
+  for (let k = 0; k < mains; k++) {
+    g += `<line x1="${L}" y1="${mainY(k)}" x2="${L + 12}" y2="${mainY(k)}" class="tk"/><line x1="${R - 12}" y1="${mainY(k)}" x2="${R}" y2="${mainY(k)}" class="tk"/>`;
+  }
+
+  // platforms
+  p.tracks.forEach((t, i) => {
+    const pc = t.berths.filter((b) => b.kind === 'platform').map((b) => b.col);
+    if (!pc.length) return;
+    const x1 = colX(Math.min(...pc)) - COLW / 2 + 2, x2 = colX(Math.max(...pc)) + COLW / 2 - 2;
+    g += `<rect x="${x1}" y="${rowY(i) + 9}" width="${x2 - x1}" height="4" class="i-plat"/>`;
+    g += `<text x="${(x1 + x2) / 2}" y="${rowY(i) + 13}" class="pnum" text-anchor="middle" dy="0.1em">${esc(t.name)}</text>`;
+  });
+
+  // berths: occupied track, signal heads, headcodes
+  p.tracks.forEach((t, i) => {
+    const y = rowY(i);
+    for (const b of t.berths) {
+      const cx = colX(b.col);
+      if (b.code) g += `<line x1="${cx - COLW / 2 + 2}" y1="${y}" x2="${cx + COLW / 2 - 2}" y2="${y}" class="i-occglow"/><line x1="${cx - COLW / 2 + 2}" y1="${y}" x2="${cx + COLW / 2 - 2}" y2="${y}" class="i-occ"/>`;
+      const sx = b.col <= 3 ? cx + COLW / 2 - 2 : cx - COLW / 2 + 2;
+      const cls = b.signal === 'on' ? 'on' : b.signal === 'off' ? 'off' : 'unk';
+      g += `<line x1="${sx}" y1="${y - 2}" x2="${sx}" y2="${y - 8}" class="stem"/><circle cx="${sx}" cy="${y - 10.5}" r="2.8" class="sg ${cls}"><title>Signal ${esc(p.area + b.id)}</title></circle>`;
+      if (b.code) {
+        g += `<g class="hcbox b-${b.band}" data-train="${esc(b.code)}" tabindex="0" role="button" aria-label="${esc(b.code)} at platform road ${esc(t.name)}, ${esc(lateText(b.delay))}">
+          <rect x="${cx - 17}" y="${y - 7.5}" width="34" height="15" rx="1.5"/><text x="${cx}" y="${y + 3.6}" text-anchor="middle">${esc(b.code)}</text></g>`;
+      } else {
+        g += `<rect x="${cx - 17}" y="${y - 7.5}" width="34" height="15" rx="1.5" class="berth-empty"><title>Berth ${esc(b.id)}</title></rect>`;
+      }
+    }
+  });
+
+  // labels
+  g += `<text x="${SVGW / 2}" y="20" class="lbl big" text-anchor="middle">${esc(p.name.toUpperCase())}</text>`;
+  g += `<text x="${L + 4}" y="38" class="lbl">◀ ${esc(p.ends[0])}</text><text x="${R - 4}" y="38" class="lbl" text-anchor="end">${esc(p.ends[1])} ▶</text>`;
+  g += `<text x="${L + 4}" y="${H - 14}" class="clock">${new Date(ui.view.updated).toLocaleTimeString('en-GB', { timeZone: 'Europe/London' })}</text>`;
+  g += `<text x="${R - 4}" y="${H - 14}" class="lbl small" text-anchor="end">TD ${esc(p.area)}</text>`;
+
+  const late = p.late.length
+    ? p.late.map((t) => `<button class="row" data-train="${esc(t.code)}"><span class="hc b-${band(t)}">${esc(t.code)}</span><span class="what">${esc(t.desc || 'Platform road ' + t.track)}</span><span class="mins c-${band(t)}">${esc(shortLate(t.delay, t.cancelled))}</span></button>`).join('')
+    : `<div class="empty">Nothing running late here right now.</div>`;
+
+  return `${head}
+    <div class="iecc-wrap"><svg class="iecc" viewBox="0 0 ${SVGW} ${H}" role="img" aria-label="Signal panel for ${esc(p.name)}">${g}</svg></div>
+    <p class="note">Tap a headcode for that train. Pinch to zoom in.</p>
     ${legend()}
     <section class="list"><div class="list-h">Late on this panel</div>${late}</section>`;
 }

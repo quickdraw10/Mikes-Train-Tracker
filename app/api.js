@@ -39,3 +39,9 @@ export async function moves(lat, lon, km = 15) {
   if (how === 'demo') return sim.moves(lat, lon, km);
   return get(`/api/moves?lat=${lat}&lon=${lon}&km=${km}`);
 }
+
+export async function train(id) {
+  const how = await ready;
+  if (how === 'demo') return sim.train(id);
+  return get(`/api/train/${encodeURIComponent(id)}`);
+}

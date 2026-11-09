@@ -8,8 +8,14 @@ Live UK train positions and delays, drawn from Network Rail's signalling data, i
   "Watch this area" to keep a chip for it (e.g. Nottingham) that opens a live log of every train
   movement within 15 km.
 - **Boards** – departures and arrivals for any station: search, "Find stations near me", or saved stations.
-- **Panel (design A)** – an old-school signal box panel. Each train's headcode sits in the
-  signalling berth it is in, and the track it occupies lights up in its delay colour.
+- **Panel (design A)** – York station (TD area Y1) drawn like a signaller's IECC screen: one road per
+  platform with its approach berths at each end, headcodes in boxes coloured by delay, occupied track lit
+  white and live signal heads. The layout is built on start-up from Network Rail's SMART berth data
+  (`server/panelbuild.js`); signals are learnt from the S-Class feed as trains pass
+  (`server/decode.js`) and fill in over the first hour or so. Check what SMART gave at `/api/panel-debug`.
+- **Train screen** – tap any train for where it came from, where it's going, its next stop with expected
+  time and platform, and every stop with booked and actual times. The service downloads Network Rail's
+  daily timetable (`server/timetable.js`) and matches each live train to it.
 - **Route (design C)** – a line of stations with Down and Up tracks. Each section is coloured
   by the delay of the train in it, or the last train through it in the past 20 minutes.
 

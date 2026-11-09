@@ -13,14 +13,17 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PANELS } from '../app/layout.js';
+import { YORK } from '../app/layout.js';
 import { emptyState, buildView } from '../app/model.js';
 import { createSim } from '../app/sim.js';
 import { handleTd } from './td.js';
 import { handleSClass } from './sclass.js';
 import { handleTrust, buildStanoxIndex, prune } from './trust.js';
 import { applyStanox, loadStanoxCrs, downloadCorpus, haveCorpus } from './corpus.js';
-import { createNational, handleNational, trainsIn, movesNear, pruneNational } from './national.js';
+import { createNational, handleNational, trainsIn, movesNear, pruneNational, attachAll, detailOf } from './national.js';
+import { createTimetable, loadTimetable } from './timetable.js';
+import { downloadSmart, buildStationPanel, smartDebug } from './panelbuild.js';
+import { createDecoder } from './decode.js';
 import { getBoard } from './ldb.js';
 import { createNationalSim } from '../app/national-sim.js';
 
@@ -34,6 +37,9 @@ let raw;
 let national; // the map, station boards and area movements
 let stats = { td: 0, trust: 0, lastTd: null, lastTrust: null, started: Date.now() };
 
+let livePanels = null; // panel layouts built from SMART (live only)
+let panelDebug = null;
+
 if (live) {
   raw = emptyState();
   raw.mode = 'live';
@@ -43,15 +49,50 @@ if (live) {
   }
   applyStanox();
   const stanoxIndex = buildStanoxIndex();
-  const areas = new Set(PANELS.map((p) => p.area));
+  const stanoxCrs = loadStanoxCrs();
+  const tt = createTimetable();
+  const nat = createNational(tt);
+
+  // ---- York panel: layout from SMART, signals learnt from the feed ----
+  const areas = new Set([YORK.area]);
+  livePanels = [{ ...YORK, style: 'iecc', tracks: [], note: 'Building the York layout from Network Rail\'s berth data…' }];
+  const loadPanel = async () => {
+    try {
+      const smart = await downloadSmart(user, pass);
+      const built = buildStationPanel(smart, YORK);
+      panelDebug = { built: built.source, ...smartDebug(smart, YORK) };
+      livePanels = [built.tracks.length ? built : { ...built, note: `No platforms for ${YORK.name} found in SMART area ${YORK.area}.` }];
+      console.log(`[panel] ${YORK.name}: ${built.tracks.length} platform roads from ${built.source.stationRows} SMART rows`);
+      schedulePush();
+    } catch (e) {
+      console.log('[panel] SMART failed:', e.message, '— retrying in 15 min');
+      livePanels[0].note = 'Could not download the berth data yet. Retrying shortly.';
+      setTimeout(loadPanel, 15 * 60000);
+    }
+  };
+  loadPanel();
+
   raw.signalMap = {};
-  for (const a of areas) {
-    const f = path.join(here, 'data', `signals-${a}.json`);
-    if (fs.existsSync(f)) {
-      raw.signalMap[a] = JSON.parse(fs.readFileSync(f, 'utf8')).signals || {};
-      console.log(`[signals] ${Object.keys(raw.signalMap[a]).length} signals mapped in area ${a}`);
-    } else console.log(`[signals] no data/signals-${a}.json yet — signals show as unknown. Run: npm run signals -- ${a}`);
-  }
+  const sigFile = path.join(here, 'data', `signals-${YORK.area}.json`);
+  if (fs.existsSync(sigFile)) raw.signalMap[YORK.area] = JSON.parse(fs.readFileSync(sigFile, 'utf8')).signals || {};
+  const decoder = createDecoder();
+  setInterval(() => {
+    const found = (decoder.results().signals || {})[YORK.area] || {};
+    if (!Object.keys(found).length) return;
+    raw.signalMap[YORK.area] = { ...(raw.signalMap[YORK.area] || {}), ...found };
+    stats.signalsMapped = Object.keys(raw.signalMap[YORK.area]).length;
+    try { fs.mkdirSync(path.dirname(sigFile), { recursive: true }); fs.writeFileSync(sigFile, JSON.stringify({ area: YORK.area, updated: new Date().toISOString(), signals: raw.signalMap[YORK.area] })); } catch { /* disk is optional */ }
+    schedulePush();
+  }, 5 * 60000);
+
+  // ---- timetable: load now, then each morning after the new file is out (~06:00) ----
+  const loadTt = async () => {
+    try { await loadTimetable(tt, { user, pass }); attachAll(nat); stats.timetable = { schedules: tt.schedules, dates: tt.dates }; }
+    catch (e) { console.log('[timetable] failed:', e.message, '— retrying in 30 min'); setTimeout(loadTt, 30 * 60000); }
+  };
+  loadTt();
+  setInterval(() => { const h = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: 'numeric', hourCycle: 'h23' }).format(new Date())); if (h === 6 && Date.now() - (tt.loadedAt || 0) > 12 * 3600000) loadTt(); }, 10 * 60000);
+
   const { connectFeeds } = await import('./feeds.js');
   connectFeeds({
     user, pass,
@@ -61,11 +102,11 @@ if (live) {
       if (topic === 'td') {
         stats.td += batch.length; stats.lastTd = now;
         changed = handleTd(batch, raw, areas);
-        const sBefore = JSON.stringify(raw.sbits);
-        handleSClass(batch, raw, areas);
-        if (JSON.stringify(raw.sbits) !== sBefore) changed = true;
-      }
-      else {
+        for (const item of batch) { const m = item.CA_MSG; if (m && areas.has(m.area_id)) decoder.noteStep(m.area_id, m.from, now); }
+        const sChanges = handleSClass(batch, raw, areas);
+        if (sChanges.length) { decoder.noteChanges(sChanges, now); changed = true; }
+        decoder.settle(now, raw.sbits);
+      } else {
         stats.trust += batch.length; stats.lastTrust = now;
         changed = handleTrust(batch, raw, stanoxIndex, now);
         handleNational(batch, nat, stanoxCrs, now);
@@ -73,13 +114,12 @@ if (live) {
       if (changed) { raw.updated = now; schedulePush(); }
     }
   });
-  const nat = createNational();
-  const stanoxCrs = loadStanoxCrs();
   setInterval(() => { prune(raw); pruneNational(nat); }, 10 * 60 * 1000);
   national = {
     trains: (box) => trainsIn(nat, box),
     moves: (lat, lon, r) => movesNear(nat, lat, lon, r),
-    board: (crs, type) => getBoard(crs, type)
+    board: (crs, type) => getBoard(crs, type),
+    train: (id) => detailOf(nat, id)
   };
 } else {
   const sim = createSim();
@@ -87,18 +127,19 @@ if (live) {
   setInterval(() => { sim.tick(); schedulePush(); }, 4000);
   const nsim = createNationalSim();
   setInterval(() => nsim.tick(), 10000);
-  national = { trains: nsim.trains, moves: nsim.moves, board: nsim.board };
+  national = { trains: nsim.trains, moves: nsim.moves, board: nsim.board, train: nsim.train };
   console.log('No NR_USER / NR_PASS set — running on demo trains.');
 }
 
 // ---- live updates to connected phones ----
+const view = () => buildView(raw, Date.now(), livePanels || undefined);
 const clients = new Set();
 let pushTimer = null;
 function schedulePush() {
   if (pushTimer) return;
   pushTimer = setTimeout(() => {
     pushTimer = null;
-    const data = 'data: ' + JSON.stringify(buildView(raw)) + '\n\n';
+    const data = 'data: ' + JSON.stringify(view()) + '\n\n';
     for (const res of clients) res.write(data);
   }, 1000);
 }
@@ -116,11 +157,11 @@ const server = http.createServer((req, res) => {
   cors(res);
   if (url.pathname === '/api/view') {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-    return res.end(JSON.stringify(buildView(raw)));
+    return res.end(JSON.stringify(view()));
   }
   if (url.pathname === '/api/stream') {
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
-    res.write('retry: 5000\n\ndata: ' + JSON.stringify(buildView(raw)) + '\n\n');
+    res.write('retry: 5000\n\ndata: ' + JSON.stringify(view()) + '\n\n');
     clients.add(res);
     req.on('close', () => clients.delete(res));
     return;
@@ -137,6 +178,9 @@ const server = http.createServer((req, res) => {
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return json(400, { error: 'Need lat and lon' });
     return json(200, national.moves(lat, lon, r));
   }
+  const tm = /^\/api\/train\/([A-Za-z0-9]{4,12})$/.exec(url.pathname);
+  if (tm) return json(200, national.train(tm[1]) || { error: 'Unknown train' });
+  if (url.pathname === '/api/panel-debug') return json(200, panelDebug || { note: live ? 'Still loading SMART' : 'Demo mode' });
   const bm = /^\/api\/board\/([A-Za-z]{3})$/.exec(url.pathname);
   if (bm) {
     const type = url.searchParams.get('type') === 'arr' ? 'arr' : 'dep';

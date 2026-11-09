@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node index.js",
     "demo": "node index.js",
-    "test": "node test.js && node test-national.js",
+    "test": "node test.js && node test-national.js && node test-timetable.js",
     "corpus": "node corpus.js",
     "sniff": "node sniff.js",
     "smart": "node smart.js",
