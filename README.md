@@ -119,6 +119,8 @@ on its own, but not the service. When the app is hosted somewhere other than the
 - Station list: [uk-railway-stations](https://github.com/davwheat/uk-railway-stations), Open Database License (ODbL).
 - Map: © OpenStreetMap contributors (tile.openstreetmap.org, fine for personal use; a commercial version would need its own tile provider).
 - Train data: Network Rail open data feeds; station boards from National Rail via the Rail Data Marketplace.
+  The Live Departure Board licence requires National Rail to be credited wherever its data is shown (done on
+  every live board) and allows commercial use only where the data has been enhanced or combined with other data.
 
 ## Still to build
 

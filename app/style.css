@@ -251,3 +251,6 @@ body[data-tab="map"] { overflow: hidden; }
 .stop .sn small { font-size: 11px; font-weight: 500; color: var(--text2); }
 .stop .sb { font: 600 13px var(--mono); color: var(--text2); text-align: right; }
 .stop .sa { font: 700 13px var(--mono); text-align: right; }
+
+.credit { margin: 10px 20px 0; font-size: 11px; color: var(--text2); }
+.sheet .credit { margin: 10px 0 0; }
