@@ -140,6 +140,7 @@ function groupSheet(items) {
 async function trainSheet(t) {
   clearInterval(sheetTimer);
   let d = null;
+  let detailed = false;
   const html = () => {
     const delay = d ? d.delay : t.delay, cancelled = d ? d.cancelled : t.cancelled;
     const bd = bandOf(delay, cancelled);
@@ -156,23 +157,41 @@ async function trainSheet(t) {
       next = `<div class="nextstop"><span class="lbl">${nx ? 'Next timing point' : 'Last seen'}</span><b>${esc(nx || t.last || '–')}</b></div>`;
     }
     const last = (d && d.last) || (t.last ? { name: t.last, event: t.lastEvent, at: t.lastAt } : null);
-    const stops = d && d.stops && d.stops.length ? `<div class="stops">${d.stops.map((s) => {
-      const cls = s.state === 'passed' ? 'passed' : (d.next && s === d.next) || (d.next && s.name === d.next.name) ? 'next' : '';
-      const right = s.state === 'passed' ? (s.actual ? hhmm(s.actual) : '✓') : (s.expected && s.expected !== s.booked ? `<span class="c-${bd}">${esc(s.expected)}</span>` : 'On time');
-      return `<div class="stop ${cls}"><i></i><span class="sn">${esc(s.name)}${s.platform ? `<small>Plat ${esc(s.platform)}</small>` : ''}</span><span class="sb">${esc(s.booked || '')}</span><span class="sa">${d.cancelled && s.state !== 'passed' ? '<span class="c-bad">Canc</span>' : right}</span></div>`;
+    const shown = d && d.stops ? d.stops.filter((s) => detailed || !s.pass) : [];
+    const passCount = d && d.stops ? d.stops.filter((s) => s.pass).length : 0;
+    const stops = shown.length ? `<div class="stops">${shown.map((s) => {
+      const isNext = d.next && s === d.next;
+      const cls = [s.state === 'passed' ? 'passed' : '', isNext ? 'next' : '', s.cancelled ? 'cancelled' : '', s.pass ? 'pass' : ''].join(' ');
+      const actual = typeof s.actual === 'number' ? hhmm(s.actual) : s.actual;
+      let right;
+      if (s.cancelled || (d.cancelled && s.state !== 'passed')) right = '<span class="c-bad">Cancelled</span>';
+      else if (s.state === 'passed') right = actual || '✓';
+      else if (s.expected && s.expected !== s.booked && /\d/.test(s.expected)) right = `<span class="c-${bd}">${esc(s.expected)}</span>`;
+      else if (s.expected === 'Delayed') right = '<span class="c-mid">Delayed</span>';
+      else right = s.pass ? 'pass' : 'On time';
+      const plat = s.platform ? `Plat ${esc(s.platform)}` : s.hiddenPlatform ? `Plat ${esc(s.hiddenPlatform)} <em>(not shown to public)</em>` : '';
+      const booked = s.pass ? (s.working || s.booked || '') : (s.booked || '');
+      return `<div class="stop ${cls}"><i></i><span class="sn">${esc(s.name)}${s.pass ? '<small>passes</small>' : plat ? `<small>${plat}</small>` : ''}</span><span class="sb">${esc(booked)}</span><span class="sa">${right}</span></div>`;
     }).join('')}</div>` : (d && d.note ? `<p class="note">${esc(d.note)}</p>` : '');
+    const extras = d ? [
+      d.length ? `${d.length} coaches` : null,
+      d.cancelReason ? esc(d.cancelReason) : d.delayReason ? esc(d.delayReason) : null
+    ].filter(Boolean) : [];
+    const toggle = passCount ? `<button class="detail-toggle" data-act="detail" aria-pressed="${detailed}">${detailed ? 'Hide' : 'Show'} ${passCount} passing point${passCount === 1 ? '' : 's'}</button>` : '';
+    const source = d && d.source === 'darwin' ? '<p class="credit">Stops ahead live from National Rail</p>' : d && d.liveNote ? `<p class="credit">${esc(d.liveNote)}</p>` : '';
     return `<div class="sheet-top"><div class="big b-${bd}">${esc(shortLate(delay, cancelled))}</div>
       <div><div class="meta">${esc(t.code)}${op ? ' · ' + esc(op) : ''}</div><h2 id="sheet-title">${title}</h2><p class="c-${bd === 'none' ? 'none' : bd}">${esc(lateText(delay, cancelled))}</p></div></div>
       ${next}
       ${last ? `<p class="lastseen">${esc(last.event || 'Seen')} ${esc(last.name)}${last.at ? ' at ' + hhmm(last.at) : ''}</p>` : ''}
-      <div class="sheet-body">${!d ? '<div class="empty">Loading stops…</div>' : stops}</div>`;
+      ${extras.length ? `<p class="lastseen">${extras.join(' · ')}</p>` : ''}
+      <div class="sheet-body">${!d ? '<div class="empty">Loading stops…</div>' : stops + toggle + source}</div>`;
   };
   const load = async () => {
     d = await api.train(t.id).catch(() => null);
     if (d && d.error) d = null;
     if (sheetOpen()) updateSheet(html());
   };
-  openSheet(html(), {}, () => clearInterval(sheetTimer));
+  openSheet(html(), { detail: () => { detailed = !detailed; updateSheet(html()); } }, () => clearInterval(sheetTimer));
   load();
   sheetTimer = setInterval(load, 30000);
 }

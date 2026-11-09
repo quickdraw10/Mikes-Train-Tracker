@@ -69,10 +69,14 @@ npm test           # checks the feed parsing with sample messages
    watching which bit drops to red as each train passes, and saves `server/data/signals-VC.json`.
    Busy signals decode within an hour; rarely used ones can take days, and running it again adds to
    what it found. If an area sends no signalling data the tool says so, and its signals stay hollow.
-6. **Station boards:** register at https://raildata.org.uk (free, "Individual not affiliated with a
+6. **Live train data (main source):** subscribe to **Live Departure Board - Staff Version** and put its
+   Consumer key in `LDB_STAFF_KEY`. It gives the train screen's live stops ahead (cancelled stops, passing
+   points, platforms including hidden ones, coaches, reasons) and the departure boards (with headcodes and
+   non-passenger trains). Check the raw reply at `/api/staff-debug/YRK`.
+7. **Backup boards:** register at https://raildata.org.uk (free, "Individual not affiliated with a
    company"), subscribe to **Live Departure Board** and, for arrivals, **Live Arrival
    Board**, and copy each product's Consumer key into `LDB_KEY` and `LDB_ARR_KEY`.
-7. `npm start` – it now says "live mode". The map needs `npm run corpus` (step 3) to know which
+8. `npm start` – it now says "live mode". The map needs `npm run corpus` (step 3) to know which
    station each movement report is at.
 
 ## Hosting on Railway

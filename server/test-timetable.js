@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { createTimetable, ingest, finish, matchByHeadcode, trainDetail, mins } from './timetable.js';
 import { createNational, handleNational, detailOf, attachAll } from './national.js';
 import { buildStationPanel } from './panelbuild.js';
+import { findService, serviceToLive, staffTime } from './staff.js';
+import { mergeLive } from './national.js';
 
 let passed = 0;
 const test = (name, fn) => { fn(); passed++; console.log('  ✓', name); };
@@ -100,6 +102,30 @@ test('York panel: one road per platform, approach berths on the correct side', (
   assert.ok(road5['0500'].col <= 2 && road5['0501'].col <= 2, 'south approaches on the left');
   assert.ok(road5['0520'].col >= 5 && road5['0530'].col >= 5, 'north approaches on the right');
   assert.equal(road5['0490'].col, 0, 'outer berth found from the stepping table');
+});
+
+test('live National Rail stops replace the timetable ahead, including cancelled stops and passing points', () => {
+  const svc = { rid: 'R1', uid: 'C12345', trainid: '1D14', operator: 'Northern', length: 4, isCancelled: false, delayReason: 'A late running train',
+    std: '2026-11-09T14:08:00', etd: '2026-11-09T14:13:00', platform: '2', destination: [{ locationName: 'Leeds' }],
+    subsequentLocations: [
+      { locationName: 'Skelton Jn', tiploc: 'SKELTON', isPass: true, wtp: '2026-11-09T14:11:30' },
+      { locationName: 'Wakefield Kirkgate', crs: 'WKK', sta: '2026-11-09T14:32:00', eta: '2026-11-09T14:37:00', platform: '1', isCancelled: true },
+      { locationName: 'Leeds', crs: 'LDS', sta: '2026-11-09T14:50:00', eta: '2026-11-09T14:55:00', platform: '15', platformIsHidden: true }
+    ] };
+  const board = { locationName: 'Adwick', trainServices: [{ uid: 'X', trainid: '2X99' }, svc] };
+  const found = findService(board, { uid: 'C12345', headcode: '1D14' });
+  assert.equal(found.rid, 'R1');
+  const live = serviceToLive(found, { name: 'Adwick', crs: 'AWK' });
+  const base = { stops: [{ name: 'Doncaster', state: 'passed' }, { name: 'Adwick', state: 'due' }], dest: 'Leeds' };
+  const d = mergeLive(base, live);
+  assert.deepEqual(d.stops.map((s) => s.name), ['Doncaster', 'Adwick', 'Skelton Jn', 'Wakefield Kirkgate', 'Leeds']);
+  assert.equal(d.stops[2].pass, true);
+  assert.equal(d.stops[3].cancelled, true);
+  assert.equal(d.next.name, 'Adwick');
+  assert.equal(d.stops[4].hiddenPlatform, '15');
+  assert.equal(d.stops[4].expected, '14:55');
+  assert.equal(d.delayReason, 'A late running train');
+  assert.equal(staffTime(Date.UTC(2026, 6, 1, 13, 5, 9)), '20260701T140509'); // BST
 });
 
 console.log(`\n${passed} timetable and panel tests passed`);

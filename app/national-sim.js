@@ -134,9 +134,18 @@ export function createNationalSim(count = 900) {
       return { name: p.name, booked: hm(times[i]), platform: String(1 + (p.crs.charCodeAt(0) + i) % 6), state: passed ? 'passed' : 'due',
         actual: passed ? times[i] + t.delay * 60000 : null, expected: passed ? null : hm(times[i] + t.delay * 60000) };
     });
+    // Show off the live features: a fast train passes some stations, and the odd stop is cancelled
+    const fast = t.code[0] === '1';
+    stops.forEach((s, i) => {
+      if (fast && i > 0 && i < stops.length - 1 && i % 2 === 0) { s.pass = true; s.working = s.booked; s.platform = null; }
+      if (!s.pass && s.state === 'due' && i === stops.length - 2 && t.delay >= 10) s.cancelled = true;
+    });
+    const next = stops.find((s, i) => i > t.leg && !s.pass && !s.cancelled) || null;
     return {
-      mode: 'demo', id: t.code, code: t.code, delay: t.delay, cancelled: t.cancelled, operator: t.toc, matched: true, passenger: true,
-      origin: t.path[0].name, dest: t.path[t.path.length - 1].name, next: stops[t.leg + 1] || null, stops,
+      mode: 'demo', source: 'darwin', length: 4 + (t.code.charCodeAt(3) % 3) * 2,
+      delayReason: t.delay >= 5 ? 'This train has been delayed by a fault with the signalling system' : null,
+      id: t.code, code: t.code, delay: t.delay, cancelled: t.cancelled, operator: t.toc, matched: true, passenger: true,
+      origin: t.path[0].name, dest: t.path[t.path.length - 1].name, next, stops,
       last: { name: t.path[t.leg].name, event: 'Departed', at: times[t.leg] + t.delay * 60000 }
     };
   }

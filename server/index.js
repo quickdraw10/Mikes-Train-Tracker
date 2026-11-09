@@ -20,7 +20,8 @@ import { handleTd } from './td.js';
 import { handleSClass } from './sclass.js';
 import { handleTrust, buildStanoxIndex, prune } from './trust.js';
 import { applyStanox, loadStanoxCrs, downloadCorpus, haveCorpus } from './corpus.js';
-import { createNational, handleNational, trainsIn, movesNear, pruneNational, attachAll, detailOf } from './national.js';
+import { createNational, handleNational, trainsIn, movesNear, pruneNational, attachAll, liveDetailOf } from './national.js';
+import { staffBoard } from './staff.js';
 import { createTimetable, loadTimetable } from './timetable.js';
 import { downloadSmart, buildStationPanel, smartDebug } from './panelbuild.js';
 import { createDecoder } from './decode.js';
@@ -119,7 +120,7 @@ if (live) {
     trains: (box) => trainsIn(nat, box),
     moves: (lat, lon, r) => movesNear(nat, lat, lon, r),
     board: (crs, type) => getBoard(crs, type),
-    train: (id) => detailOf(nat, id)
+    train: (id) => liveDetailOf(nat, id)
   };
 } else {
   const sim = createSim();
@@ -179,7 +180,17 @@ const server = http.createServer((req, res) => {
     return json(200, national.moves(lat, lon, r));
   }
   const tm = /^\/api\/train\/([A-Za-z0-9]{4,12})$/.exec(url.pathname);
-  if (tm) return json(200, national.train(tm[1]) || { error: 'Unknown train' });
+  if (tm) {
+    Promise.resolve(national.train(tm[1])).then((d) => json(200, d || { error: 'Unknown train' })).catch((e) => json(500, { error: e.message }));
+    return;
+  }
+  const sd = /^\/api\/staff-debug\/([A-Za-z]{3})$/.exec(url.pathname);
+  if (sd) {
+    staffBoard(sd[1].toUpperCase(), { raw: true })
+      .then((b) => { const svcs = (b && b.trainServices) || []; json(200, { ...b, trainServices: svcs.slice(0, 2), servicesShown: Math.min(2, svcs.length), servicesTotal: svcs.length }); })
+      .catch((e) => json(500, { error: e.message }));
+    return;
+  }
   if (url.pathname === '/api/panel-debug') return json(200, panelDebug || { note: live ? 'Still loading SMART' : 'Demo mode' });
   const bm = /^\/api\/board\/([A-Za-z]{3})$/.exec(url.pathname);
   if (bm) {

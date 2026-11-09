@@ -8,6 +8,7 @@
 import { BY_CRS, km, inBox } from '../app/geo.js';
 import { band } from '../app/model.js';
 import { headcodeOf, delayOf, trustTime } from './trust.js';
+import { staffBoard, staffEnabled, findService, serviceToLive } from './staff.js';
 import { byUid, matchByHeadcode, nameOfTiploc, trainDetail, wallDate, OPERATORS } from './timetable.js';
 
 const TOCS = { '84': 'South Western Railway', '88': 'GTR' };
@@ -129,6 +130,49 @@ export function detailOf(nat, id) {
   if (!d.matched && t.at) d.nextReport = t.next ? t.next.name : null;
   if (nat.tt && !nat.tt.loadedAt) d.note = 'The timetable is still loading, so stops will appear shortly.';
   return d;
+}
+
+// The same, with the stops ahead replaced by National Rail's live data when
+// the Staff Version key is set: cancelled stops, platform changes, passing points.
+export async function liveDetailOf(nat, id, getBoard = staffBoard) {
+  const d = detailOf(nat, id);
+  if (d.error || !staffEnabled()) return d;
+  const t = nat.trains.get(id);
+  // Ask the board at the next station (or the last one, if it hasn't moved on)
+  const candidates = [];
+  if (d.next && d.next.crs) candidates.push(d.next.crs);
+  if (t.next && t.next.crs) candidates.push(t.next.crs);
+  if (t.at && t.at.crs) candidates.push(t.at.crs);
+  for (const crs of [...new Set(candidates)]) {
+    let board;
+    try { board = await getBoard(crs); } catch { continue; }
+    if (!board || board.error) continue;
+    const svc = findService(board, { uid: t.uid, headcode: t.code });
+    if (!svc) continue;
+    const st = BY_CRS.get(crs) || { name: board.locationName || crs, crs };
+    return mergeLive(d, serviceToLive(svc, st));
+  }
+  d.liveNote = 'National Rail has no live calling points for this train (freight and some specials are not covered).';
+  return d;
+}
+
+export function mergeLive(d, live) {
+  const passed = d.stops.filter((s) => s.state === 'passed');
+  const firstAhead = live.stops[0];
+  const keep = passed.filter((s) => s.name !== firstAhead.name);
+  const ahead = live.stops.map((s) => ({
+    ...s, state: s.actual ? 'passed' : 'due',
+    expected: s.cancelled ? null : (s.expected && /\d/.test(s.expected) ? s.expected : s.expected === 'On time' ? s.booked : s.expected)
+  }));
+  const stops = [...keep, ...ahead];
+  const next = ahead.find((s) => s.state === 'due' && !s.pass && !s.cancelled) || null;
+  return {
+    ...d, stops, next, source: 'darwin',
+    origin: d.origin || live.origin, dest: live.dest || d.dest,
+    operator: d.operator || live.operator, cancelled: d.cancelled || live.cancelled,
+    cancelReason: live.cancelReason, delayReason: live.delayReason, length: live.length,
+    matched: true
+  };
 }
 
 export function movesNear(nat, lat, lon, radius = 15, now = Date.now()) {

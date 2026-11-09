@@ -240,7 +240,7 @@ body[data-tab="map"] { overflow: hidden; }
 .nextstop s { color: #8FA0C8; font-weight: 600; margin-left: 4px; }
 .lastseen { margin: 0; font-size: 13px; color: var(--text2); }
 .stops { position: relative; padding: 4px 0 6px; }
-.stop { position: relative; display: grid; grid-template-columns: 22px minmax(0, 1fr) 50px 60px; gap: 6px; align-items: center; min-height: 40px; }
+.stop { position: relative; display: grid; grid-template-columns: 22px minmax(0, 1fr) 46px 78px; gap: 6px; align-items: center; min-height: 40px; }
 .stop i { justify-self: center; width: 11px; height: 11px; border-radius: 6px; background: var(--bg); box-shadow: inset 0 0 0 2.5px var(--text2); z-index: 1; }
 .stop::before { content: ""; position: absolute; left: 10px; top: 0; bottom: 0; width: 3px; background: var(--line); }
 .stop:first-child::before { top: 50%; } .stop:last-child::before { bottom: 50%; }
@@ -284,3 +284,15 @@ body[data-tab="map"] { overflow: hidden; }
 .dots { margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.5; }
 .dots li { margin: 4px 0; }
 .dots li::marker { color: var(--trim); }
+
+.stop.cancelled .sn { color: var(--bad); text-decoration: line-through; text-decoration-thickness: 1.5px; }
+.stop.cancelled i { box-shadow: inset 0 0 0 2.5px var(--bad); }
+.stop.pass { min-height: 30px; }
+.stop.pass .sn { font-size: 13px; font-weight: 500; color: var(--text2); }
+.stop.pass i { width: 7px; height: 7px; }
+.stop .sn em { font-style: normal; color: var(--trim); }
+.detail-toggle { display: block; margin: 6px 0 2px; min-height: 40px; padding: 0 14px; border: 0; border-radius: 12px; background: var(--navy); color: #FFFFFF; font-weight: 600; font-size: 13px; box-shadow: inset 0 0 0 1.5px var(--trim); cursor: pointer; }
+
+.bplace .hcode { font: 700 11px var(--mono); color: var(--trim); margin-right: 6px; }
+.brow.nonpass .bplace b { color: var(--text2); }
+.bplat.hidden-plat { box-shadow: inset 0 0 0 1.5px var(--trim); color: var(--trim); }

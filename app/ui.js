@@ -73,11 +73,11 @@ export function boardHTML(b, type) {
   const rows = b.services.map((s) => {
     const bd = bandOf(s.delay, s.cancelled);
     const exp = s.cancelled ? 'Canc' : s.expected === 'On time' ? 'On time' : s.expected || '–';
-    return `<div class="brow">
+    return `<div class="brow${s.passenger === false ? ' nonpass' : ''}">
       <span class="btime">${esc(s.booked)}</span>
-      <span class="bexp c-${bd}">${esc(exp)}</span>
-      <span class="bplace"><b>${esc(s.place)}</b><small>${esc([s.toc, s.reason].filter(Boolean).join(' · '))}</small></span>
-      <span class="bplat${s.platform ? '' : ' none'}">${esc(s.platform || '–')}</span>
+      <span class="bexp c-${bd}">${esc(s.departed ? 'Dep ' + (s.expected === 'On time' ? s.booked : s.expected) : exp)}</span>
+      <span class="bplace"><b>${s.headcode ? `<span class="hcode">${esc(s.headcode)}</span>` : ''}${esc(s.place)}</b><small>${esc([s.passenger === false ? 'Not in passenger service' : null, s.toc, s.length ? s.length + ' coaches' : null, s.reason].filter(Boolean).join(' · '))}</small></span>
+      <span class="bplat${s.platform ? '' : ' none'}${s.platformHidden ? ' hidden-plat' : ''}" title="${s.platformHidden ? 'Not shown on public screens' : ''}">${esc(s.platform || '–')}</span>
     </div>`;
   }).join('');
   const msgs = (b.messages || []).map((m) => `<p class="bmsg">${esc(m)}</p>`).join('');

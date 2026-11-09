@@ -222,7 +222,7 @@ export function trainDetail(tt, t) {
     const rep = sx && reported[sx];
     const passed = i <= lastIdx;
     const stop = {
-      name: nameOfTiploc(tt, l.t), booked: hhmmOf(booked), platform: l.plat,
+      name: nameOfTiploc(tt, l.t), crs: (tt.tiplocs.get(l.t) || {}).crs || null, booked: hhmmOf(booked), platform: l.plat,
       actual: rep ? rep.at : null, state: passed ? 'passed' : 'due',
       expected: !passed && booked != null && !t.cancelled ? hhmmOf(booked + Math.max(0, delay)) : null
     };
