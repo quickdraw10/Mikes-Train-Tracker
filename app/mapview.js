@@ -184,6 +184,11 @@ function selectTrain(t, open = false) {
   if (lastRes) drawTrains(lastRes);
   if (open) trainSheet(t);
 }
+// From any train screen: show this train on the map, with its route so far
+export function focusTrain(t) {
+  if (!started) start();
+  setTimeout(() => { map.invalidateSize(); selected = null; selectTrain(t); }, 50);
+}
 async function loadPath(fit) {
   if (!selected) return;
   const id = selected.id;
@@ -206,6 +211,7 @@ async function loadPath(fit) {
   });
   drawSelBar(d && !d.error ? d : null, pts);
   if (fit && line.length) map.flyToBounds(L.latLngBounds(line).pad(0.25), { maxZoom: 13, duration: 0.6 });
+  else if (fit && selected.lat != null) map.flyTo([selected.lat, selected.lon], 13, { duration: 0.6 });
 }
 function drawSelBar(d, pts = []) {
   const bar = document.getElementById('sel-bar');
@@ -300,7 +306,7 @@ export async function trainSheet(t) {
       ${last ? `<p class="lastseen">${esc(last.event || 'Seen')} ${esc(last.name)}${last.at ? ' at ' + hhmm(last.at) : ''}</p>` : ''}
       ${extras.length ? `<p class="lastseen">${extras.join(' · ')}</p>` : ''}
       <div class="sheet-body">${!d ? '<div class="empty">Loading stops…</div>' : stops + toggle + source}</div>
-      ${d && d.stops && routeFromStops(d.stops) ? '<div class="sheet-actions one"><button data-act="route">Make this my route</button></div>' : ''}`;
+      <div class="sheet-actions"><button data-act="onmap">Show on map</button>${d && d.stops && routeFromStops(d.stops) ? '<button data-act="route">Make this my route</button>' : ''}</div>`;
   };
   const load = async () => {
     d = await api.train(t.id).catch(() => null);
@@ -309,6 +315,7 @@ export async function trainSheet(t) {
   };
   openSheet(html(), {
     detail: () => { detailed = !detailed; updateSheet(html()); },
+    onmap: () => { closeCustomSheet(); window.dispatchEvent(new CustomEvent('mtt:showtrain', { detail: { train: t } })); },
     route: () => {
       const origin = (d && d.origin) || t.origin, dest = (d && d.dest) || t.dest;
       const r = routeFromStops(d && d.stops, origin && dest ? `${origin} – ${dest}` : null);

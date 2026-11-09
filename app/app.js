@@ -7,7 +7,7 @@ import { buildView, band } from './model.js';
 import { createSim } from './sim.js';
 import * as api from './api.js';
 import { closeCustomSheet, openSheet as openCustom, toast, bandOf, opBadge } from './ui.js';
-import { showMap, trainSheet, stationSheet } from './mapview.js';
+import { showMap, trainSheet, stationSheet, focusTrain } from './mapview.js';
 import * as route from './route.js';
 import { BY_CRS, searchStations } from './geo.js';
 import { showBoards } from './boards.js';
@@ -158,9 +158,15 @@ function renderPanel() {
         const x = left ? M / 2 : W - M / 2;
         g += `<line x1="${left ? 4 : cx(b.col) + cw / 2}" y1="${y}" x2="${left ? cx(b.col) - cw / 2 : W - 4}" y2="${y}" class="tk"/>`;
         const tr = list[0];
-        g += `<g class="hcbox b-${tr.band}" data-train="${esc(tr.code)}" tabindex="0" role="button" aria-label="${esc(tr.code)}, ${tr.dist} sections further out, ${esc(lateText(tr.delay, tr.cancelled))}">
-          <rect x="${x - 17}" y="${y - 7.5}" width="34" height="15" rx="1.5"/><text x="${x}" y="${y + 3.6}" text-anchor="middle">${esc(tr.code)}</text></g>`;
-        if (list.length > 1) g += `<text x="${x}" y="${y - 10}" class="lbl small" text-anchor="middle">+${list.length - 1} more</text>`;
+        if (list.length === 1) {
+          g += `<g class="hcbox b-${tr.band}" data-train="${esc(tr.code)}" tabindex="0" role="button" aria-label="${esc(tr.code)}, ${tr.dist} sections further out, ${esc(lateText(tr.delay, tr.cancelled))}">
+            <rect x="${x - 17}" y="${y - 7.5}" width="34" height="15" rx="1.5"/><text x="${x}" y="${y + 3.6}" text-anchor="middle">${esc(tr.code)}</text></g>`;
+        } else {
+          // several trains on this line: one box, tap for the list (like the map's bubbles)
+          const worst = list.reduce((w, t) => (({ bad: 3, mid: 2, ok: 1, none: 0 })[t.band] > ({ bad: 3, mid: 2, ok: 1, none: 0 })[w.band] ? t : w), list[0]);
+          g += `<g class="hcbox grp b-${worst.band}" data-edge="${i}:${b.col}" tabindex="0" role="button" aria-label="${list.length} trains on this line beyond road ${esc(t.name)}">
+            <rect x="${x - 25}" y="${y - 7.5}" width="50" height="15" rx="7.5"/><text x="${x}" y="${y + 3.6}" text-anchor="middle">${list.length} trains</text></g>`;
+        }
       }
     });
   }
@@ -376,6 +382,7 @@ function routeBuilder(startCrs) {
 }
 
 window.addEventListener('mtt:route', (e) => { useRoute(e.detail.route); toast(e.detail.quiet ? `${e.detail.route.name} is now on the Route tab` : `Route set from ${e.detail.train}'s stops`); });
+window.addEventListener('mtt:showtrain', (e) => { switchTab('map'); focusTrain(e.detail.train); });
 window.addEventListener('mtt:build', (e) => { switchTab('route'); routeBuilder(e.detail.crs); });
 
 // ---------- train sheet ----------
@@ -383,7 +390,7 @@ function openSheet(code) {
   // A panel headcode linked to a real train (same headcode, near this station) opens the full train screen
   const p = ui.view.panels[ui.panel];
   if (p && ui.tab === 'panel') {
-    const all = [...p.tracks.flatMap((t) => t.berths), ...p.late, ...(p.lanes || []).flatMap((l) => l.trains)];
+    const all = [...p.tracks.flatMap((t) => t.berths), ...p.late, ...Object.values(p.edges || {}).flat()];
     const hit = all.find((b) => b.code === code && b.natId);
     if (hit) return trainSheet({ id: hit.natId, code, delay: hit.delay, cancelled: hit.cancelled });
   }
@@ -408,6 +415,24 @@ function renderSheet() {
     <p>${last}</p>
     <p class="note" style="padding:0">Not matched to a timetabled train yet: no train with this headcode has reported near here. Freight and short-notice trains often aren't in the timetable.</p>
     <button class="close">Close</button>`;
+}
+
+// The trains further out on one line at the edge of the panel, nearest first
+function edgeSheet(id) {
+  const p = ui.view.panels[ui.panel];
+  const list = (p && p.edges && p.edges[id]) || [];
+  const [road, col] = id.split(':').map(Number);
+  const side = col === 0 ? p.ends[0] : p.ends[1];
+  const rows = list.map((t) => {
+    const bd = bandOf(t.delay, t.cancelled);
+    return `<button class="row" data-act="train" data-arg="${esc(t.code)}"><span class="hc b-${bd}">${esc(t.code)}</span>
+      <span class="what">${t.dist + 5} sections from the platform<small class="sub-line">${esc(side)} side · beyond road ${esc(p.tracks[road] ? p.tracks[road].name : '')}</small></span>
+      <span class="mins c-${bd}">${esc(t.delay == null && !t.cancelled ? '–' : shortLate(t.delay, t.cancelled))}</span></button>`;
+  }).join('');
+  openCustom(`<div class="st-head"><div><div class="meta">${esc(p.name)} · ${col === 0 ? '◀' : '▶'} ${esc(side)}</div><h2 id="sheet-title">${list.length} trains on this line</h2></div></div>
+    <div class="sheet-body list flush">${rows || '<div class="empty">No trains here now.</div>'}</div>`, {
+    train: (code) => { closeCustomSheet(); openSheet(code); }
+  });
 }
 
 // The panel is landscape. In portrait it's drawn turned on its side, filling the width,
@@ -477,6 +502,8 @@ document.querySelector('.tabs').addEventListener('click', (e) => {
   if (btn) switchTab(btn.dataset.tab);
 });
 $view.addEventListener('click', (e) => {
+  const eg = e.target.closest('[data-edge]');
+  if (eg) return edgeSheet(eg.dataset.edge);
   const pc = e.target.closest('[data-panel]');
   if (pc) { ui.panel = Number(pc.dataset.panel); try { localStorage.setItem('mtt.panel', String(ui.panel)); } catch { /* not saved */ } render(); return; }
   const rt = e.target.closest('[data-rtrain]');
