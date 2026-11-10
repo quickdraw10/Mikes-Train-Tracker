@@ -82,7 +82,7 @@ export function boardHTML(b, type) {
     const bd = s.expected === 'Delayed' && !s.cancelled ? 'mid' : bandOf(s.delay, s.cancelled);
     const exp = s.cancelled ? 'Canc' : s.expected === 'On time' ? 'On time' : s.expected || '–';
     const info = [
-      s.next && !s.cancelled ? `<small class="bnext">Next stop: ${esc(s.next)}</small>` : '',
+      s.next && !s.cancelled ? `<small class="bnext">${esc(s.nextLabel || 'Next stop')}: ${esc(s.next)}</small>` : '',
       s.toc || s.passenger === false ? `<small>${opBadge(s.toc, s.tocCode)}${esc([s.passenger === false ? 'Not in passenger service' : null, s.toc].filter(Boolean).join(' · '))}</small>` : '',
       s.length || s.firstClass ? `<small>${esc([s.length ? s.length + ' coaches' : null, s.firstClass].filter(Boolean).join(' · '))}</small>` : '',
     ].join('');

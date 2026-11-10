@@ -89,7 +89,7 @@ function drawTrains(res) {
     if (sel) drawChip(sel);
   } else {
     for (const t of list) {
-      const c = COLORS[t.band] || COLORS.none;
+      const c = t.color || COLORS[t.band] || COLORS.none;
       const sel = selected && selected.id === t.id;
       L.circleMarker([t.lat, t.lon], { radius: sel ? 8 : z <= 7 ? 3 : 5, color: sel ? '#E3B53A' : '#0C1B38', weight: sel ? 3 : 1, fillColor: c, fillOpacity: 0.95 })
         .on('click', () => selectTrain(t)).addTo(trainLayer);
@@ -116,10 +116,13 @@ function drawChip(t) {
   const c = COLORS[t.band] || COLORS.none;
   const icon = L.divIcon({
     className: 'tchip-wrap',
-    html: `<span class="tchip${selected && selected.id === t.id ? ' sel' : ''}"><b>${esc(t.code)}</b><i style="background:${c}">${esc(shortLate(t.delay, t.cancelled))}</i></span>`,
+    // TfL trains have no "minutes late": they carry their line's colour instead
+    html: t.color
+      ? `<span class="tchip line${selected && selected.id === t.id ? ' sel' : ''}"><b style="background:${t.color};color:${['#FFD300', '#F3A9BB', '#A0A5A9', '#95CDBA', '#84B817'].includes(t.color) ? '#0B0D12' : '#FFFFFF'}">${esc(t.code)}</b><i>${esc(t.next ? '→ ' + t.next : '')}</i></span>`
+      : `<span class="tchip${selected && selected.id === t.id ? ' sel' : ''}"><b>${esc(t.code)}</b><i style="background:${c}">${esc(shortLate(t.delay, t.cancelled))}</i></span>`,
     iconSize: null, iconAnchor: [0, 14]
   });
-  L.marker([t.lat, t.lon], { icon, keyboard: true, title: `${t.code} ${lateText(t.delay, t.cancelled)}` })
+  L.marker([t.lat, t.lon], { icon, keyboard: true, title: t.color ? `${t.toc} line train, ${t.last || ''}` : `${t.code} ${lateText(t.delay, t.cancelled)}` })
     .on('click', () => selectTrain(t)).addTo(trainLayer);
 }
 

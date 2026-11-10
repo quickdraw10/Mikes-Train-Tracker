@@ -26,6 +26,7 @@ import { createTimetable, loadTimetable } from './timetable.js';
 import { downloadSmart, buildStationPanel, smartDebug } from './panelbuild.js';
 import { createDecoder } from './decode.js';
 import { getBoard, serviceDetail } from './ldb.js';
+import { createTfl, loadTflStations, pollTfl, pollTflStatus, tflTrainsIn, tflBoard, tflTrain } from './tfl.js';
 import { createIrish, loadStations as loadIrishStations, pollTrains as pollIrish, irishTrainsIn, irishBoard, irishTrain } from './ie.js';
 import { BY_CRS } from '../app/geo.js';
 import { createNationalSim } from '../app/national-sim.js';
@@ -42,6 +43,7 @@ let stats = { td: 0, trust: 0, lastTd: null, lastTrust: null, started: Date.now(
 
 let livePanels = null; // panel layouts built from SMART (live only)
 let ieState = null;
+let tflState = null;
 let panelDebug = null;
 
 if (live) {
@@ -181,6 +183,32 @@ if (live) {
     train: (id) => (String(id).startsWith('ie:') ? irishTrain(ie, id) : gb.train(id)),
     service: (crs, type, id) => (isIrish(crs) ? irishTrain(ie, id) : gb.service(crs, type, id))
   };
+
+  // ---- London: TfL (Tube, DLR, Trams) ----
+  const tfl = createTfl();
+  tflState = tfl;
+  const tflStations = () => loadTflStations(tfl).then((n) => console.log(`[tfl] ${n} stations`)).catch((e) => { tfl.error = e.message; setTimeout(tflStations, 10 * 60000); });
+  tflStations().then(() => pollTfl(tfl)).catch(() => {});
+  setInterval(tflStations, 24 * 3600000);
+  setInterval(() => { if (tfl.byLine.size) pollTfl(tfl).catch((e) => { tfl.error = e.message; }); }, 60000); // TfL caches for about a minute
+  const tflStatus = () => pollTflStatus(tfl).catch((e) => { tfl.error = e.message; });
+  tflStatus();
+  setInterval(tflStatus, 120000);
+  const withIe = national;
+  national = {
+    ...withIe,
+    trains: (box, max = 600) => {
+      const r = withIe.trains(box, max);
+      if (box.e < -0.65 || box.w > 0.4 || box.n < 51.25 || box.s > 51.75) return r;
+      const extra = tflTrainsIn(tfl, box);
+      if (!extra.length) return r;
+      // TfL trains have no lateness, so they go after the National Rail ones
+      return { ...r, total: r.total + extra.length, trains: [...r.trains, ...extra].slice(0, max) };
+    },
+    board: (crs, type) => (tfl.stations.has(crs) ? tflBoard(tfl, crs) : withIe.board(crs, type)),
+    train: (id) => (String(id).startsWith('tfl:') ? tflTrain(tfl, id) : withIe.train(id)),
+    service: (crs, type, id) => (String(id).startsWith('tfl:') ? tflTrain(tfl, id) : String(id).startsWith('tflp:') ? { error: 'TfL doesn\'t give a train number for this one, so its other stops aren\'t available.' } : withIe.service(crs, type, id))
+  };
 } else {
   const sim = createSim();
   raw = sim.raw;
@@ -241,7 +269,7 @@ const server = http.createServer((req, res) => {
   }
   if (url.pathname === '/api/stations-extra') {
     // stations outside Great Britain the app can show (Ireland so far)
-    return json(200, { stations: ieState ? [...ieState.stations.values()] : [] });
+    return json(200, { stations: [...(ieState ? ieState.stations.values() : []), ...(tflState ? [...tflState.stations.values()].map(({ lines, ...s }) => s) : [])] });
   }
   if (url.pathname === '/api/ni-raw') {
     // Fetch Translink's open data (or its Worldline backup) as the server sees it, to
@@ -302,8 +330,10 @@ const server = http.createServer((req, res) => {
     })().catch((e) => json(200, { error: e.message }));
     return;
   }
+  if (url.pathname === '/api/tfl-status') return json(200, { lines: tflState ? tflState.status : [] });
+  if (url.pathname === '/api/tfl-debug') return json(200, tflState ? { stations: tflState.stations.size, lines: tflState.byLine.size, trains: tflState.trains.size, at: tflState.at ? new Date(tflState.at).toISOString() : null, key: Boolean(process.env.TFL_KEY), error: tflState.error, status: tflState.status.slice(0, 4), sample: [...tflState.trains.values()].slice(0, 4) } : { note: 'Not running (demo mode)' });
   if (url.pathname === '/api/ie-debug') return json(200, ieState ? { trains: ieState.trains.size, stations: ieState.stations.size, at: ieState.at ? new Date(ieState.at).toISOString() : null, error: ieState.error, sample: [...ieState.trains.values()].slice(0, 3) } : { note: 'Not running (demo mode)' });
-  const tm = /^\/api\/train\/([A-Za-z0-9:% ]{4,40})$/.exec(decodeURIComponent(url.pathname));
+  const tm = /^\/api\/train\/([A-Za-z0-9:% -]{4,48})$/.exec(decodeURIComponent(url.pathname));
   if (tm) {
     Promise.resolve(national.train(tm[1])).then((d) => json(200, d || { error: 'Unknown train' })).catch((e) => json(500, { error: e.message }));
     return;
@@ -322,14 +352,14 @@ const server = http.createServer((req, res) => {
     if (id) return json(200, panelDebug[id] || { note: 'Still loading SMART, or no such panel. Panels: ' + STATION_PANELS.map((p) => p.id).join(', ') });
     return json(200, Object.fromEntries(Object.entries(panelDebug).map(([k, v]) => [k, { areas: v.areas, stationRows: v.stationRows, built: v.built, more: `/api/panel-debug?id=${k}` }])));
   }
-  const sv = /^\/api\/service\/([A-Za-z]{3,6})$/.exec(url.pathname);
+  const sv = /^\/api\/service\/([A-Za-z0-9]{3,14})$/.exec(url.pathname);
   if (sv) {
     const type = url.searchParams.get('type') === 'arr' ? 'arr' : 'dep';
     Promise.resolve(national.service(sv[1].toUpperCase(), type, url.searchParams.get('id') || ''))
       .then((d) => json(200, d)).catch((e) => json(502, { error: e.message }));
     return;
   }
-  const bm = /^\/api\/board\/([A-Za-z]{3,6})$/.exec(url.pathname);
+  const bm = /^\/api\/board\/([A-Za-z0-9]{3,14})$/.exec(url.pathname);
   if (bm) {
     const type = url.searchParams.get('type') === 'arr' ? 'arr' : 'dep';
     Promise.resolve(national.board(bm[1].toUpperCase(), type))

@@ -6,6 +6,7 @@
 // lines, and the same line-placing code as the Route tab.
 
 import * as api from './api.js';
+let tflLines = null;
 import { BY_CRS } from './geo.js';
 import { band } from './model.js';
 import { place } from './route.js';
@@ -157,7 +158,18 @@ function render() {
     <div class="iecc-wrap">${svg()}</div>
     <p class="note">Each stretch shows the average delay of the trains on it. Tap a stretch for its trains, or a station for its board.</p>
     <div class="legend"><span><i class="b-ok"></i>On time</span><span><i class="b-mid"></i>2–9 late</span><span><i class="b-bad"></i>10+ late</span><span><i class="b-none"></i>No trains</span></div>
-    ${worstList()}`;
+    ${worstList()}
+    ${londonLines()}`;
+}
+
+// TfL line status: Good service, Minor delays, Part closure... with TfL's explanation
+const sevBand = (sev) => (sev === 10 ? 'ok' : sev === 9 || sev === 19 ? 'mid' : 'bad');
+function londonLines() {
+  if (!tflLines || !tflLines.length) return '';
+  const rows = tflLines.map((l) => `<button class="row" data-tfl="${esc(l.id)}"><span class="lbar" style="background:${esc(l.color || '#59606B')}"></span>
+    <span class="what">${esc(l.name)}${l.reason && l.severity !== 10 ? `<small class="sub-line">${esc(l.reason.slice(0, 90))}${l.reason.length > 90 ? '…' : ''}</small>` : ''}</span>
+    <span class="mins c-${sevBand(l.severity)}">${esc(l.status || '')}</span></button>`).join('');
+  return `<section class="list"><div class="list-h">London lines · TfL</div>${rows}</section><p class="credit">Powered by TfL Open Data</p>`;
 }
 
 function segSheet(key) {
@@ -186,6 +198,13 @@ export function showNetwork(container, handlers) {
   if (!el.dataset.wired) {
     el.dataset.wired = '1';
     el.addEventListener('click', (e) => {
+      const tl = e.target.closest('[data-tfl]');
+      if (tl) {
+        const l = tflLines.find((x) => x.id === tl.dataset.tfl);
+        if (l) openSheet(`<div class="st-head"><div><div class="meta">TfL line status</div><h2 id="sheet-title">${esc(l.name)}</h2></div></div>
+          <div class="sheet-body"><p class="c-${sevBand(l.severity)}" style="font-weight:700">${esc(l.status || '')}</p><p>${esc(l.reason || 'No disruption reported.')}</p><p class="credit">Powered by TfL Open Data</p></div>`, {});
+        return;
+      }
       const sg = e.target.closest('[data-seg]');
       if (sg) return segSheet(sg.dataset.seg);
       const st = e.target.closest('[data-crs]');
@@ -194,5 +213,6 @@ export function showNetwork(container, handlers) {
   }
   render();
   if (!state.at || Date.now() - state.at > 30000) refresh().then(render);
+  api.tflStatus().then((r) => { if (r && r.lines) { tflLines = r.lines; render(); } });
   if (!timer) timer = setInterval(() => { if (!el.hidden && !document.hidden) refresh().then(render); }, 60000);
 }
