@@ -27,7 +27,13 @@ export const CREWE = {
   id: 'cre', name: 'Crewe', subtitle: 'Cheshire', crs: 'CRE',
   ends: ['STAFFORD · STOKE', 'WARRINGTON · CHESTER']
 };
-export const STATION_PANELS = [YORK, CLAPHAM, CREWE];
+// Hull Paragon is a terminus: every train comes in from the west (Brough / Selby line and the
+// Beverley line, which join outside the station), so the London side is the only way out.
+export const HULL = {
+  id: 'hul', name: 'Hull Paragon', subtitle: 'East Yorkshire', crs: 'HUL',
+  ends: ['BROUGH · BEVERLEY', 'BUFFER STOPS']
+};
+export const STATION_PANELS = [YORK, HULL, CLAPHAM, CREWE];
 
 function demoRoad(name, n, dir, cols) {
   const base = 1000 + n * 10;
