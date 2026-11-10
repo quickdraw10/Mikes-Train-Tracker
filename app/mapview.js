@@ -369,18 +369,38 @@ export async function trainSheet(t) {
 }
 
 // ---------- stations ----------
+// Landmark stations named on the Underground map when zoomed out: big interchanges and termini,
+// spread across zones 1–2 so you can find your way. Everything else is named when you zoom in.
+const LU_KEY = new Set(["king's cross st. pancras", 'euston', 'paddington', 'baker street', 'oxford circus', 'bank', 'liverpool street',
+  'waterloo', 'victoria', 'london bridge', 'westminster', 'stratford', 'canary wharf', 'tottenham court road', 'earl\'s court',
+  'notting hill gate', 'camden town', 'elephant & castle', 'brixton', 'finsbury park', 'wimbledon', 'hammersmith', 'tower hill', 'green park']);
+const luShort = (n) => String(n || '').replace(/\s*\((Underground|DLR|Tram)\)$/, '');
+
 function drawStations() {
   stationLayer.clearLayers();
   const z = map.getZoom();
   if (z < STATION_ZOOM) return;
   const b = map.getBounds();
+  const labelled = new Set(); // one label per name (Bank has Underground and DLR stops)
   for (const [crs, name, lat, lon] of STATIONS) {
     if (!b.contains([lat, lon])) continue;
     // railway stations on the main map, Underground/DLR/tram stops in the LU view
     const isTfl = (BY_CRS.get(crs) || {}).country === 'tfl';
     if (isTfl !== luMode) continue;
-    const m = L.circleMarker([lat, lon], { radius: 6, color: '#E3B53A', weight: 2, fillColor: '#0C1B38', fillOpacity: 1 });
-    if (z >= LABEL_ZOOM) m.bindTooltip(name, { permanent: true, direction: 'right', offset: [8, 0], className: 'stn-label' });
+    let m;
+    if (luMode) {
+      // Underground: small white stops; names only for a few landmark stations until zoomed right in.
+      // Every stop can still be tapped for its name and board.
+      const short = luShort(name);
+      m = L.circleMarker([lat, lon], { radius: z >= 15 ? 5 : 4, color: '#FFFFFF', weight: 2, fillColor: '#0019A8', fillOpacity: 1 });
+      const st = BY_CRS.get(crs) || {};
+      const show = z >= 16 || (z >= 15 && (st.nLines || 1) >= 2) || (z >= 12 && LU_KEY.has(short.toLowerCase()));
+      if (show && !labelled.has(short)) { labelled.add(short); m.bindTooltip(short, { permanent: true, direction: 'right', offset: [7, 0], className: 'stn-label lu-label' }); }
+      else m.bindTooltip(short, { direction: 'top', offset: [0, -6], className: 'stn-label lu-label' });
+    } else {
+      m = L.circleMarker([lat, lon], { radius: 6, color: '#E3B53A', weight: 2, fillColor: '#0C1B38', fillOpacity: 1 });
+      if (z >= LABEL_ZOOM) m.bindTooltip(name, { permanent: true, direction: 'right', offset: [8, 0], className: 'stn-label' });
+    }
     m.on('click', () => stationSheet(crs));
     m.addTo(stationLayer);
   }
@@ -397,7 +417,7 @@ export async function stationSheet(crs, type = 'dep') {
   const areas = loadList(AREAS_KEY);
   const saved = loadList(STATIONS_KEY);
   const html = () => `
-    <div class="st-head"><div><div class="meta">${esc(crs)}</div><h2 id="sheet-title">${esc(st.name)}</h2></div></div>
+    <div class="st-head"><div><div class="meta">${lu ? esc((/\((Underground|DLR|Tram)\)$/.exec(st.name) || [, 'Underground'])[1]) : esc(crs)}</div><h2 id="sheet-title">${esc(lu ? luShort(st.name) : st.name)}</h2></div></div>
     ${lu ? '<div class="lu-boardname">Arrivals / Departures</div>' : `<div class="segctl" role="tablist">
       <button role="tab" data-act="type" data-arg="dep" aria-selected="${current === 'dep'}">Departures</button>
       <button role="tab" data-act="type" data-arg="arr" aria-selected="${current === 'arr'}">Arrivals</button>

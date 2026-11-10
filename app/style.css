@@ -433,3 +433,4 @@ body[data-theme="light"].lu-mode[data-tab="map"], body[data-theme="light"] .lu {
   font: 700 14px var(--display); letter-spacing: 0.02em; box-shadow: inset 4px 0 0 var(--lu-red); }
 .lu-boardname.pad { margin: 0 12px; }
 body.lu-mode[data-tab="map"] .lu-btn[aria-pressed="true"] { background: #FFFFFF; color: #0019A8; box-shadow: inset 0 0 0 2px var(--lu-red); }
+.lu-label { background: rgba(0,25,168,0.92); color: #FFFFFF; font: 600 11px var(--body); padding: 1px 5px; border-radius: 4px; }

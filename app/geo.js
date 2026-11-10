@@ -9,7 +9,7 @@ export function addStations(list) {
   for (const s of list || []) {
     if (!s.crs || BY_CRS.has(s.crs)) continue;
     STATIONS.push([s.crs, s.name, s.lat, s.lon]);
-    BY_CRS.set(s.crs, { crs: s.crs, name: s.name, lat: s.lat, lon: s.lon, country: s.country || null });
+    BY_CRS.set(s.crs, { crs: s.crs, name: s.name, lat: s.lat, lon: s.lon, country: s.country || null, nLines: s.nLines || null });
   }
 }
 

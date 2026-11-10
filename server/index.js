@@ -266,7 +266,7 @@ const server = http.createServer((req, res) => {
   }
   if (url.pathname === '/api/stations-extra') {
     // stations outside Great Britain the app can show (Ireland so far)
-    return json(200, { stations: [...(ieState ? ieState.stations.values() : []), ...(tflState ? [...tflState.stations.values()].map(({ lines, ...s }) => s) : [])] });
+    return json(200, { stations: [...(ieState ? ieState.stations.values() : []), ...(tflState ? [...tflState.stations.values()].map(({ lines, ...s }) => ({ ...s, nLines: lines.length })) : [])] });
   }
   if (url.pathname === '/api/ni-raw') {
     // Fetch Translink's open data (or its Worldline backup) as the server sees it, to
@@ -375,7 +375,8 @@ const server = http.createServer((req, res) => {
   if (!file.startsWith(APP_DIR)) { res.writeHead(403); return res.end(); }
   fs.readFile(file, (err, buf) => {
     if (err) { res.writeHead(404); return res.end('Not found'); }
-    res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream' });
+    // no-cache: phones check for a newer version each time, so updates show straight away
+    res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
     res.end(buf);
   });
 });
