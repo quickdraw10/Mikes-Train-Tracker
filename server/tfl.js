@@ -43,8 +43,11 @@ let keyWay = null, prefix = null;
 // TfL's portal lists the address as /trackernet/…; older guides say /TrackerNet/…
 const PREFIXES = ['/trackernet', '/TrackerNet'];
 export const trackernetAuth = () => (keyWay == null ? 'not yet' : `${['query app_key', 'app_key header', 'subscription header'][keyWay]} via ${prefix}`);
+// Trackernet is a separate TfL subscription with its own key (TFL_TRACKERNET_KEY);
+// if that isn't set, the main key is tried.
+const trackernetKey = () => process.env.TFL_TRACKERNET_KEY || process.env.TFL_KEY;
 async function getText(path) {
-  const key = process.env.TFL_KEY;
+  const key = trackernetKey();
   const base = { 'user-agent': 'MikesTrainTracker/1.0' };
   const tries = [];
   if (key) for (const pre of prefix ? [prefix] : PREFIXES) for (const i of keyWay != null ? [keyWay] : [0, 1, 2]) tries.push([pre, i]);
@@ -149,7 +152,7 @@ export async function pollTfl(tfl, now = Date.now()) {
   const viaTrackernet = new Set();
   // If TfL refuses Trackernet (not part of the key's subscription), stop asking for 30 minutes
   // so the refused calls don't use up the key's request allowance; the Unified feed covers the trains.
-  if (process.env.TFL_KEY && Date.now() >= (tfl.trackernetPauseUntil || 0)) {
+  if (trackernetKey() && Date.now() >= (tfl.trackernetPauseUntil || 0)) {
     for (const [id, code] of Object.entries(TRACKERNET)) {
       if (id === 'hammersmith-city' && viaTrackernet.has('circle')) continue;
       let rows;
