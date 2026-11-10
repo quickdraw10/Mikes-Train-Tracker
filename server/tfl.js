@@ -27,6 +27,8 @@ export const TFL_LINES = {
   tram: { name: 'Trams', short: 'TRM', color: '#84B817' }
 };
 const STATUS_MODES = 'tube,dlr,overground,elizabeth-line,tram';
+// Line colours for the status page (lines the map doesn't draw yet)
+const OTHER_COLOURS = { elizabeth: '#6950A1', liberty: '#61686B', lioness: '#FAA61A', mildmay: '#0071CE', suffragette: '#5BBD72', weaver: '#823A62', windrush: '#DC241F' };
 
 // Trackernet (Tube only): TfL's operational feed, with every train by its set number.
 // Needs TFL_KEY. Line codes from TfL's Trackernet guide; H covers Hammersmith & City and Circle.
@@ -210,10 +212,20 @@ export async function pollTfl(tfl, now = Date.now()) {
 export async function pollTflStatus(tfl) {
   const lines = await get(`/Line/Mode/${STATUS_MODES}/Status`);
   tfl.status = lines.map((l) => {
-    const s = (l.lineStatuses || [])[0] || {};
-    return { id: l.id, name: l.name, mode: l.modeName, severity: s.statusSeverity ?? null, status: s.statusSeverityDescription || null, reason: s.reason || null,
-      color: (TFL_LINES[l.id] || {}).color || (l.modeName === 'elizabeth-line' ? '#6950A1' : l.modeName === 'overground' ? '#EE7C0E' : null) };
+    // a line can have several at once (e.g. Part suspended + Severe delays + Minor delays), each with TfL's explanation
+    const all = [];
+    for (const s of l.lineStatuses || []) {
+      const st = { severity: s.statusSeverity ?? null, status: s.statusSeverityDescription || null, reason: s.reason || null };
+      const same = all.find((x) => x.status === st.status);
+      if (!same) all.push(st); else if (st.reason && same.reason !== st.reason) same.reason = [same.reason, st.reason].filter(Boolean).join('\n\n');
+    }
+    all.sort((a, b) => (a.severity ?? 10) - (b.severity ?? 10));
+    const s = all[0] || {};
+    return { id: l.id, name: l.name, mode: l.modeName, severity: s.severity ?? null, status: s.status || null, reason: s.reason || null, statuses: all,
+      color: (TFL_LINES[l.id] || {}).color || OTHER_COLOURS[l.id] || (l.modeName === 'overground' ? '#EE7C0E' : null) };
   });
+  // as on TfL's status page: lines with problems first (worst first), then the rest A–Z
+  tfl.status.sort((a, b) => (a.severity === 10) - (b.severity === 10) || (a.severity === 10 ? 0 : (a.severity ?? 10) - (b.severity ?? 10)) || a.name.localeCompare(b.name));
 }
 
 export function tflTrainsIn(tfl, box) {

@@ -7,6 +7,7 @@ import * as api from './api.js';
 import { STATIONS } from './stations.js';
 import { BY_CRS, nearest, searchStations } from './geo.js';
 import { routeFromStops } from './route.js';
+import { statusSheet } from './tflstatus.js';
 import { opBadge, esc, hhmm, lateText, shortLate, bandOf, openSheet, updateSheet, sheetOpen, closeCustomSheet, loadList, saveList, toast, boardHTML, luBoardHTML, textOn } from './ui.js';
 
 const AREAS_KEY = 'mtt.areas';
@@ -116,8 +117,21 @@ window.addEventListener('resize', moreArrows);
 if (window.ResizeObserver) new ResizeObserver(moreArrows).observe($lines); // e.g. coming back to the Map tab
 $up.addEventListener('click', () => $lines.scrollBy({ top: -$lines.clientHeight * 0.7, behavior: 'smooth' }));
 $down.addEventListener('click', () => $lines.scrollBy({ top: $lines.clientHeight * 0.7, behavior: 'smooth' }));
+// line status button (LU view): an amber dot when any line has problems
+const $stat = document.getElementById('lu-status');
+$stat.addEventListener('click', () => statusSheet());
+async function statusDot() {
+  $stat.hidden = !luMode;
+  if (!luMode) return;
+  const r = await api.tflStatus().catch(() => null);
+  const bad = r && r.lines ? r.lines.filter((l) => l.severity !== 10).length : 0;
+  $stat.innerHTML = $stat.innerHTML.replace(/<span class="dot"><\/span>/, '') + (bad ? '<span class="dot"></span>' : '');
+  $stat.setAttribute('aria-label', bad ? `London line status: ${bad} line${bad === 1 ? '' : 's'} with problems` : 'London line status: good service');
+}
+setInterval(() => { if (luMode && !document.hidden) statusDot(); }, 120000);
 function drawLinePicker() {
   $lines.hidden = !luMode;
+  statusDot();
   requestAnimationFrame(moreArrows);
   if (!luMode) return;
   $lines.innerHTML = `<button class="lul all" data-line="" aria-pressed="${!luLines.length}">All</button>` +

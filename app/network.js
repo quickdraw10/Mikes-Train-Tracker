@@ -11,6 +11,7 @@ import { BY_CRS } from './geo.js';
 import { band } from './model.js';
 import { place } from './route.js';
 import { esc, shortLate, bandOf, openSheet, opBadge } from './ui.js';
+import { statusSheet } from './tflstatus.js';
 
 const line = (id, name, codes) => ({ id, name, crs: codes.split(' ') });
 export const LINES = [
@@ -169,7 +170,7 @@ function londonLines() {
   const rows = tflLines.map((l) => `<button class="row" data-tfl="${esc(l.id)}"><span class="lbar" style="background:${esc(l.color || '#59606B')}"></span>
     <span class="what">${esc(l.name)}${l.reason && l.severity !== 10 ? `<small class="sub-line">${esc(l.reason.slice(0, 90))}${l.reason.length > 90 ? '…' : ''}</small>` : ''}</span>
     <span class="mins c-${sevBand(l.severity)}">${esc(l.status || '')}</span></button>`).join('');
-  return `<section class="list"><div class="list-h">London lines · TfL</div>${rows}</section><p class="credit">Powered by TfL Open Data</p>`;
+  return `<section class="list"><div class="list-h">London lines · TfL <button class="linkish" data-tflall="1">All lines ›</button></div>${rows}</section><p class="credit">Powered by TfL Open Data</p>`;
 }
 
 function segSheet(key) {
@@ -201,10 +202,10 @@ export function showNetwork(container, handlers) {
       const tl = e.target.closest('[data-tfl]');
       if (tl) {
         const l = tflLines.find((x) => x.id === tl.dataset.tfl);
-        if (l) openSheet(`<div class="st-head"><div><div class="meta">TfL line status</div><h2 id="sheet-title">${esc(l.name)}</h2></div></div>
-          <div class="sheet-body"><p class="c-${sevBand(l.severity)}" style="font-weight:700">${esc(l.status || '')}</p><p>${esc(l.reason || 'No disruption reported.')}</p><p class="credit">Powered by TfL Open Data</p></div>`, {}, null, 'lu');
+        if (l) statusSheet(l.id);
         return;
       }
+      if (e.target.closest('[data-tflall]')) return statusSheet();
       const sg = e.target.closest('[data-seg]');
       if (sg) return segSheet(sg.dataset.seg);
       const st = e.target.closest('[data-crs]');
