@@ -271,12 +271,25 @@ function listSheet() {
 }
 document.getElementById('map-count').addEventListener('click', listSheet);
 
-function groupSheet(items) {
+// The time on the left of the "x trains" list: when it's due to leave (or arrive, if it ends
+// here) from the timetable, or when it left. Tube trains: when due at the next station.
+function dueHTML(t, bd) {
+  const d = t.due;
+  if (d && d.type === 'left') return `<span class="gtime"><b>${esc(d.time)}</b><small>left</small></span>`;
+  if (d && d.booked) return `<span class="gtime"><b${d.expected ? ' class="was"' : ''}>${esc(d.booked)}</b>${d.expected ? `<small class="c-${bd}">exp ${esc(d.expected)}</small>` : `<small>${d.type === 'arr' ? 'arr' : 'dep'}</small>`}</span>`;
+  if (t.country === 'tfl') return '<span class="gtime"></span>'; // the Tube has no timetable per train
+  return '<span class="gtime"><b class="c-none">–</b><small>no time</small></span>';
+}
+
+export function groupSheet(items) {
   const here = items[0].last;
-  const rows = [...items].sort((a, b) => RANK[b.band] - RANK[a.band] || (b.delay ?? 0) - (a.delay ?? 0)).map((t) => {
+  // in time order, like a departure board (trains with no time at the end)
+  const tkey = (t) => (t.due && (t.due.time || t.due.booked)) || '99:99';
+  const rows = [...items].sort((a, b) => tkey(a).localeCompare(tkey(b)) || RANK[b.band] - RANK[a.band]).map((t) => {
     const bd = bandOf(t.delay, t.cancelled);
-    return `<button class="row" data-act="train" data-arg="${esc(t.id)}"><span class="hc b-${bd}">${esc(t.code)}</span>
-      <span class="what">${esc(t.dest ? 'to ' + t.dest : t.next ? 'next ' + t.next : 'at ' + t.last)}${t.toc ? `<small class="sub-line">${opBadge(t.toc)}${esc(t.toc)}</small>` : ''}</span><span class="mins c-${bd}">${esc(shortLate(t.delay, t.cancelled))}</span></button>`;
+    return `<button class="row grow" data-act="train" data-arg="${esc(t.id)}">${dueHTML(t, bd)}
+      <span class="what">${esc(t.dest ? 'to ' + t.dest : t.next ? 'next ' + t.next : 'at ' + t.last)}${t.toc ? `<small class="sub-line">${opBadge(t.toc)}${esc(t.toc)}</small>` : ''}</span>
+      <span class="gright"><span class="mins c-${bd}">${esc(shortLate(t.delay, t.cancelled))}</span>${t.code ? `<small class="hc-small">${esc(t.code)}</small>` : ''}</span></button>`;
   }).join('');
   openSheet(`<div class="st-head"><div><div class="meta">${items.length} trains</div><h2 id="sheet-title">${esc(here ? 'At or near ' + here : 'Trains here')}</h2></div></div>
     <div class="sheet-body list flush">${rows}</div>`, {

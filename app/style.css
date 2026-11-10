@@ -561,3 +561,11 @@ button.dl-row.link { cursor: pointer; }
 .dl-go { margin-left: 4px; color: var(--text2); font-weight: 400; }
 
 .tab .tab-2 { line-height: 1.1; text-align: center; }
+/* "x trains" list: time first, headcode small on the right */
+.row.grow { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; }
+.gtime { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; }
+.gtime b { font: 700 16px var(--mono); }
+.gtime b.was { color: var(--text2); text-decoration: line-through; font-size: 14px; }
+.gtime small { font-size: 11px; color: var(--text2); }
+.gright { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.hc-small { font: 600 11px var(--mono); color: var(--text2); letter-spacing: 0.04em; }

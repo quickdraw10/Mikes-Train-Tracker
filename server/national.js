@@ -8,7 +8,7 @@ import { BY_CRS, km, inBox } from '../app/geo.js';
 import { band } from '../app/model.js';
 import { headcodeOf, delayOf, trustTime } from './trust.js';
 import { staffBoard, staffEnabled, findService, serviceToLive } from './staff.js';
-import { byUid, matchByHeadcode, nameOfTiploc, trainDetail, wallDate, OPERATORS } from './timetable.js';
+import { byUid, matchByHeadcode, nameOfTiploc, trainDetail, wallDate, OPERATORS, hhmmOf } from './timetable.js';
 
 const TOCS = { '84': 'South Western Railway', '88': 'GTR' };
 const LOG_MAX = 20000;
@@ -106,13 +106,31 @@ export function positionOf(t, now = Date.now()) {
   return { lat: t.at.lat, lon: t.at.lon };
 }
 
+// The time that matters for a train at or near a station, from its timetable:
+// waiting there → its booked departure (or arrival, if it ends there); just left → when it left.
+// The expected time adds TRUST's current lateness. Null when there's no timetable for the train.
+export function dueOf(nat, t) {
+  if (!t.at) return null;
+  if (t.event === 'Departed') return t.eventAt ? { type: 'left', time: hhmmFromMs(t.eventAt), at: t.at.name } : null;
+  const s = t.sched;
+  if (!s || !nat.tt || !nat.tt.tiplocs) return null;
+  const i = s.locs.findIndex((l) => (nat.tt.tiplocs.get(l.t) || {}).crs === t.at.crs);
+  if (i < 0) return null;
+  const l = s.locs[i], last = i === s.locs.length - 1;
+  const m = last ? (l.parr ?? l.arr) : (l.pdep ?? l.dep);
+  if (m == null) return null;
+  const late = Math.max(0, t.delay || 0);
+  return { type: last ? 'arr' : 'dep', booked: hhmmOf(m), expected: late >= 1 ? hhmmOf(m + late) : null, at: t.at.name };
+}
+const hhmmFromMs = (ms) => new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' });
+
 export function trainsIn(nat, box, now = Date.now(), max = 600) {
   const out = [];
   for (const t of nat.trains.values()) {
     if (t.terminated && now - t.updated > 10 * 60000) continue;
     const p = positionOf(t, now);
     if (!p || !inBox(p.lat, p.lon, box)) continue;
-    out.push({ id: t.id, code: t.code, toc: t.toc, delay: t.delay, cancelled: !!t.cancelled, band: band(t), lat: p.lat, lon: p.lon, last: t.at.name, lastCrs: t.at.crs, nextCrs: t.next ? t.next.crs : null, lastEvent: t.event, lastAt: t.eventAt, next: t.next ? t.next.name : null, origin: t.originName || null, dest: t.destName || null });
+    out.push({ id: t.id, code: t.code, toc: t.toc, delay: t.delay, cancelled: !!t.cancelled, band: band(t), lat: p.lat, lon: p.lon, last: t.at.name, lastCrs: t.at.crs, nextCrs: t.next ? t.next.crs : null, lastEvent: t.event, lastAt: t.eventAt, next: t.next ? t.next.name : null, origin: t.originName || null, dest: t.destName || null, due: dueOf(nat, t) });
   }
   // When zoomed far out, show the most delayed trains first
   out.sort((a, b) => (b.delay ?? 0) - (a.delay ?? 0));
