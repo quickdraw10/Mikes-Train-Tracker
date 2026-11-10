@@ -104,8 +104,21 @@ const MAX_LINES = 3;
 let luLines = [];
 try { luLines = JSON.parse(localStorage.getItem('mtt.lulines') || '[]').filter((l) => LU_LINES[l]).slice(0, MAX_LINES); } catch { /* none */ }
 const $lines = document.getElementById('lu-lines');
+// little "hats" above and below the list when there are more lines to scroll to
+const $up = document.getElementById('lu-up'), $down = document.getElementById('lu-down');
+function moreArrows() {
+  const can = luMode && !$lines.hidden;
+  $up.hidden = !can || $lines.scrollTop <= 2;
+  $down.hidden = !can || $lines.scrollTop + $lines.clientHeight >= $lines.scrollHeight - 2;
+}
+$lines.addEventListener('scroll', moreArrows, { passive: true });
+window.addEventListener('resize', moreArrows);
+if (window.ResizeObserver) new ResizeObserver(moreArrows).observe($lines); // e.g. coming back to the Map tab
+$up.addEventListener('click', () => $lines.scrollBy({ top: -$lines.clientHeight * 0.7, behavior: 'smooth' }));
+$down.addEventListener('click', () => $lines.scrollBy({ top: $lines.clientHeight * 0.7, behavior: 'smooth' }));
 function drawLinePicker() {
   $lines.hidden = !luMode;
+  requestAnimationFrame(moreArrows);
   if (!luMode) return;
   $lines.innerHTML = `<button class="lul all" data-line="" aria-pressed="${!luLines.length}">All</button>` +
     Object.entries(LU_LINES).map(([id, l]) => `<button class="lul" data-line="${id}" aria-pressed="${luLines.includes(id)}" aria-label="${esc(l.name)}" style="--lc:${l.color};--lt:${textOn(l.color)}"><i></i>${esc(l.short)}</button>`).join('');

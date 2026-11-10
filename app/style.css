@@ -435,7 +435,7 @@ body[data-theme="light"].lu-mode[data-tab="map"], body[data-theme="light"] .lu {
 body.lu-mode[data-tab="map"] .lu-btn[aria-pressed="true"] { background: #FFFFFF; color: #0019A8; box-shadow: inset 0 0 0 2px var(--lu-red); }
 .lu-label { background: rgba(0,25,168,0.92); color: #FFFFFF; font: 600 11px var(--body); padding: 1px 5px; border-radius: 4px; }
 /* Underground line filter, down the left edge of the map in the LU view */
-.lu-lines { position: absolute; left: 10px; top: 150px; bottom: 96px; z-index: 450; width: 58px; display: flex; flex-direction: column; gap: 5px; overflow-y: auto; padding: 2px; scrollbar-width: none; }
+.lu-lines { position: absolute; left: 10px; top: 170px; bottom: 112px; z-index: 450; width: 58px; display: flex; flex-direction: column; gap: 5px; overflow-y: auto; padding: 2px; scrollbar-width: none; }
 .lu-lines::-webkit-scrollbar { display: none; }
 .lu-lines[hidden] { display: none; }
 .lul { flex: none; height: 32px; display: flex; align-items: center; gap: 5px; padding: 0 6px; border: 0; border-radius: 8px; background: rgba(5,14,60,0.9); color: #FFFFFF; font: 700 11px var(--mono); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.25); cursor: pointer; }
@@ -462,3 +462,7 @@ button.brow.lrow { box-shadow: inset 4px 0 0 var(--lc); padding-left: 12px; }
 .lu-big { font: 800 20px var(--mono); letter-spacing: 0.02em; }
 .lul[aria-pressed="true"]:not(.all) { background: var(--lc); color: var(--lt); box-shadow: inset 0 0 0 2px #FFFFFF; }
 .lul[aria-pressed="true"]:not(.all) i { background: var(--lt); box-shadow: none; }
+.lu-more { position: absolute; left: 10px; width: 58px; height: 18px; z-index: 451; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 9px; background: rgba(5,14,60,0.92); color: #FFFFFF; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.3); cursor: pointer; padding: 0; }
+.lu-more.up { top: 149px; }
+.lu-more.down { bottom: 91px; }
+.lu-more[hidden] { display: none; }
