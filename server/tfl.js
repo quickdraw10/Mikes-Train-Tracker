@@ -28,6 +28,34 @@ export const TFL_LINES = {
 };
 const STATUS_MODES = 'tube,dlr,overground,elizabeth-line,tram';
 
+// Trackernet (Tube only): TfL's operational feed, with every train by its set number.
+// Needs TFL_KEY. Line codes from TfL's Trackernet guide; H covers Hammersmith & City and Circle.
+const TRACKERNET = { bakerloo: 'B', central: 'C', district: 'D', 'hammersmith-city': 'H', jubilee: 'J', metropolitan: 'M', northern: 'N', piccadilly: 'P', victoria: 'V', 'waterloo-city': 'W' };
+
+async function getText(path) {
+  const key = process.env.TFL_KEY;
+  const res = await fetch(`${BASE}${path}`, { headers: { 'user-agent': 'MikesTrainTracker/1.0', ...(key ? { app_key: key } : {}) }, signal: AbortSignal.timeout(15000) });
+  if (!res.ok) throw new Error(`TfL returned ${res.status}`);
+  return res.text();
+}
+
+// <S Code="BNK" N="Bank."><P N="Westbound - Platform 1" Code="0"><T S="051" T="12" D="..." C="2:30" L="Between X and Y" DE="Ealing Broadway"/></P></S>
+export function parseSummary(xml) {
+  const attrs = (tag) => Object.fromEntries([...tag.matchAll(/(\w+)="([^"]*)"/g)].map((m) => [m[1], m[2].replace(/&amp;/g, '&').replace(/&apos;/g, "'").replace(/&quot;/g, '"')]));
+  const out = [];
+  let station = null, platform = null;
+  for (const m of xml.matchAll(/<(S|P|T)\b([^>]*)>/g)) {
+    const a = attrs(m[2]);
+    if (m[1] === 'S') station = { code: a.Code, name: (a.N || '').replace(/\.$/, '') };
+    else if (m[1] === 'P') platform = a.N || null;
+    else if (station) {
+      const [mm, ss] = (a.C || '').split(':').map(Number);
+      out.push({ set: a.S, trip: a.T, station: station.name, stationCode: station.code, platform, secs: a.C === '-' ? 0 : (mm || 0) * 60 + (ss || 0), location: a.L || '', dest: a.DE || null });
+    }
+  }
+  return out;
+}
+
 async function get(path) {
   const key = process.env.TFL_KEY;
   const url = `${BASE}${path}${key ? (path.includes('?') ? '&' : '?') + 'app_key=' + encodeURIComponent(key) : ''}`;
@@ -93,10 +121,38 @@ export function placeFromText(text, names, nextName) {
   return null;
 }
 
-// All predictions, line by line (TfL's own advice: per line, not per mode)
+// All predictions, line by line (TfL's own advice: per line, not per mode). With a key, Tube
+// lines come from Trackernet, which names every train by its set number; DLR and trams, and
+// any Tube line Trackernet can't give, come from the Unified API's arrivals.
 export async function pollTfl(tfl, now = Date.now()) {
   const trains = new Map();
+  const viaTrackernet = new Set();
+  if (process.env.TFL_KEY) {
+    for (const [id, code] of Object.entries(TRACKERNET)) {
+      if (id === 'hammersmith-city' && viaTrackernet.has('circle')) continue;
+      let rows;
+      try { rows = parseSummary(await getText(`/TrackerNet/PredictionSummary/${code}`)); } catch (e) { tfl.error = `Trackernet ${code}: ${e.message}`; continue; }
+      if (!rows.length) continue;
+      viaTrackernet.add(id);
+      if (code === 'H') viaTrackernet.add('circle');
+      const names = new Map([...(tfl.byLine.get(id) || new Map()), ...(code === 'H' ? tfl.byLine.get('circle') || new Map() : [])]);
+      const bySet = new Map();
+      for (const r of rows) if (r.set && !/^0+$/.test(r.set)) (bySet.get(r.set) || bySet.set(r.set, []).get(r.set)).push(r);
+      const line = code === 'H' ? { name: 'H&C / Circle', short: 'H&C', color: TFL_LINES['hammersmith-city'].color } : TFL_LINES[id];
+      for (const [set, list] of bySet) {
+        list.sort((a, b) => a.secs - b.secs);
+        const next = list[0];
+        const pos = placeFromText(next.location, names, next.station);
+        if (!pos) continue;
+        const tid = `tfl:${id}:${set}`;
+        trains.set(tid, { id: tid, line: id, vehicle: set, code: line.short, lineName: line.name, color: line.color, lat: pos.lat, lon: pos.lon, where: pos.text,
+          dest: next.dest, next: next.station, nextIn: next.secs, platform: next.platform, updated: now, source: 'trackernet',
+          stops: list.filter((r, i, all) => all.findIndex((x) => x.station === r.station) === i).map((r) => ({ name: r.station, secs: r.secs, platform: r.platform })) });
+      }
+    }
+  }
   for (const id of Object.keys(TFL_LINES)) {
+    if (viaTrackernet.has(id)) continue;
     let preds;
     try { preds = await get(`/Line/${id}/Arrivals`); } catch (e) { tfl.error = `${id}: ${e.message}`; continue; }
     const byVehicle = new Map();
@@ -156,13 +212,24 @@ export async function tflBoard(tfl, code) {
       delay: null, cancelled: false, place: tidy(p.destinationName) || p.towards || 'Check front of train', platform: (/(\d+)\s*$/.exec(p.platformName || '') || [])[1] || null,
       toc: `${line.name}${p.platformName ? ' · ' + p.platformName : ''}`, tocCode: null, next: p.currentLocation || null, nextLabel: 'Now', reason: null, length: null };
   });
-  return { mode: 'live', source: 'tfl', crs: code, name: st ? st.name : tidy(preds[0] && preds[0].stationName) || code, services, messages: [], predictions: true,
+  const crowd = st && st.lines.some((l) => TRACKERNET[l]) ? await tflCrowding(code) : null;
+  return { mode: 'live', source: 'tfl', crs: code, name: st ? st.name : tidy(preds[0] && preds[0].stationName) || code, services, messages: crowd ? [crowd] : [], predictions: true,
     credit: 'Powered by TfL Open Data' };
 }
 
 // One train's next stops, from TfL's predictions for that train
 export async function tflTrain(tfl, id) {
   const [, line, vehicle] = id.split(':');
+  const known = tfl.trains.get(id);
+  if (known && known.stops && Date.now() - known.updated < 120000) {
+    // Trackernet: this train's predicted stops from the last update
+    const L = { name: known.lineName, short: known.code };
+    const at = (secs) => clock(new Date(known.updated + secs * 1000).toISOString());
+    const stops = known.stops.map((s) => ({ name: s.name, booked: null, expected: at(s.secs), state: 'due', pass: false, platform: (/(\d+)\s*$/.exec(s.platform || '') || [])[1] || null }));
+    return { mode: 'live', source: 'tfl', natId: id, code: L.short, operator: `${L.name} line · train ${known.vehicle}`, origin: null, dest: known.dest, delay: null, cancelled: false, matched: true,
+      stops, next: stops[0], last: { name: known.where, event: '', at: null },
+      liveNote: 'Live predictions from TfL (Trackernet). The Tube has no timetable for each train, so there are no booked times or minutes late.' };
+  }
   const preds = (await get(`/Line/${encodeURIComponent(line)}/Arrivals`)).filter((p) => String(p.vehicleId).trim() === vehicle);
   if (!preds.length) return { error: 'TfL has no predictions for this train right now.' };
   preds.sort((a, b) => a.timeToStation - b.timeToStation);
@@ -173,4 +240,22 @@ export async function tflTrain(tfl, id) {
   return { mode: 'live', source: 'tfl', natId: id, code: L.short, operator: `${L.name} line`, origin: null, dest: tidy(preds[0].destinationName) || preds[0].towards,
     delay: null, cancelled: false, matched: true, stops, next: stops[0], last: t.where ? { name: t.where, event: '', at: null } : null,
     liveNote: 'Live predictions from TfL. The Tube has no timetable for each train, so there are no booked times or minutes late.' };
+}
+
+// How busy a Tube station is right now, from TfL's live crowding data: a share of the
+// busiest it has been. TfL's own wording: quiet below 0.4, busy to 0.7, very busy above.
+export async function tflCrowding(code) {
+  const once = async (withKey) => {
+    const key = process.env.TFL_KEY;
+    const res = await fetch(`${BASE}/crowding/${encodeURIComponent(code)}/Live${withKey && key ? '?app_key=' + encodeURIComponent(key) : ''}`, { signal: AbortSignal.timeout(8000) });
+    return res.ok ? res.json() : null;
+  };
+  try {
+    let d = await once(true);
+    if (!d || !d.dataAvailable) d = await once(false); // TfL's forum reports the key sometimes breaks this call
+    if (!d || !d.dataAvailable || typeof d.percentageOfBaseline !== 'number') return null;
+    const p = d.percentageOfBaseline;
+    const level = p < 0.4 ? 'Quiet' : p <= 0.7 ? 'Busy' : 'Very busy';
+    return `How busy now: ${level} (${Math.round(p * 100)}% of its busiest) · TfL`;
+  } catch { return null; }
 }

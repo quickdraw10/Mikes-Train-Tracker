@@ -1,6 +1,6 @@
 // Tests for the TfL adapter: names and placing trains from TfL's location text.
 import assert from 'node:assert/strict';
-import { tidy, placeFromText, createTfl, tflTrainsIn } from './tfl.js';
+import { tidy, placeFromText, createTfl, tflTrainsIn, parseSummary } from './tfl.js';
 
 let passed = 0;
 const test = (name, fn) => { fn(); passed++; console.log('  ✓', name); };
@@ -41,6 +41,16 @@ test('only TfL trains inside the view, with their line colour and no lateness', 
   assert.equal(r[0].delay, null);
   assert.equal(r[0].color, '#0098D4');
   assert.equal(tflTrainsIn(tfl, { w: 0, e: 0.1, s: 51.4, n: 51.6 }).length, 0);
+});
+
+test('Trackernet summary: every train by set number, with its location and time to each station', () => {
+  const xml = '<ROOT><Time TimeStamp="2026/11/10 10:40:00"/><S Code="BNK" N="Bank."><P N="Westbound - Platform 1" Code="0"><T S="051" T="12" D="123" C="2:30" L="Between Liverpool Street and Bank" DE="Ealing Broadway"/><T S="000" T="0" D="1" C="-" L="" DE="X"/></P></S><S Code="STP" N="St. Paul\'s."><P N="Westbound - Platform 1" Code="0"><T S="051" T="12" D="123" C="4:10" L="Between Liverpool Street and Bank" DE="Ealing Broadway"/></P></S></ROOT>';
+  const r = parseSummary(xml);
+  assert.equal(r.length, 3);
+  assert.equal(r[0].set, '051');
+  assert.equal(r[0].station, 'Bank');
+  assert.equal(r[0].secs, 150);
+  assert.equal(r[2].station, "St. Paul's");
 });
 
 console.log(`\n${passed} TfL tests passed`);
