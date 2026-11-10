@@ -559,3 +559,5 @@ body:not([data-tab="map"]):not([data-tab="network"]) .lu-btn { visibility: hidde
 
 button.dl-row.link { cursor: pointer; }
 .dl-go { margin-left: 4px; color: var(--text2); font-weight: 400; }
+
+.tab .tab-2 { line-height: 1.1; text-align: center; }
