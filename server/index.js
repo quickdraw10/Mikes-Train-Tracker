@@ -373,7 +373,7 @@ const server = http.createServer((req, res) => {
   if (url.pathname === '/api/smart-find') {
     // how a station appears in Network Rail's SMART berth data, e.g. ?q=HULL
     if (!smartNames) return json(200, { note: 'SMART not loaded yet (or demo mode)' });
-    const q = (url.searchParams.get('q') || '').toUpperCase().trim();
+    const q = (url.searchParams.get('q') || '').toUpperCase().replace(/[^A-Z0-9& ]/g, '').trim(); // ignore stray punctuation
     return json(200, { q, matches: smartNames.filter((m) => !q || m.stanme.toUpperCase().includes(q) || m.stanox === q).slice(0, 40) });
   }
   if (url.pathname === '/api/panel-debug') {
