@@ -23,9 +23,11 @@ const $card = $sheet.querySelector('.sheet-card');
 let actions = {};
 let onClose = null;
 
-export function openSheet(html, acts = {}, close = null) {
+// theme 'lu' gives the sheet the London Underground colours
+export function openSheet(html, acts = {}, close = null, theme = null) {
   actions = acts;
   onClose = close;
+  $card.classList.toggle('lu', theme === 'lu');
   $card.innerHTML = `<div class="grab"></div>${html}<button class="close">Close</button>`;
   $sheet.hidden = false;
   $sheet.dataset.kind = 'custom';
@@ -43,6 +45,7 @@ export function closeCustomSheet() {
   if ($sheet.dataset.kind !== 'custom') return;
   $sheet.hidden = true;
   $sheet.dataset.kind = '';
+  $card.classList.remove('lu');
   const f = onClose; onClose = null; actions = {};
   if (f) f();
 }
@@ -77,7 +80,7 @@ export function toast(text) {
 export function boardHTML(b, type) {
   if (!b) return `<div class="empty">Loading…</div>`;
   if (b.error) return `<div class="empty">${esc(b.error)}</div>`;
-  if (!b.services.length) return `<div class="empty">No ${type === 'arr' ? 'arrivals' : 'departures'} in the next couple of hours.</div>`;
+  if (!b.services.length) return `<div class="empty">${b.predictions ? 'No trains predicted right now.' : `No ${type === 'arr' ? 'arrivals' : 'departures'} in the next couple of hours.`}</div>`;
   const rows = b.services.map((s) => {
     const bd = s.expected === 'Delayed' && !s.cancelled ? 'mid' : bandOf(s.delay, s.cancelled);
     const exp = s.cancelled ? 'Canc' : s.expected === 'On time' ? 'On time' : s.expected || '–';

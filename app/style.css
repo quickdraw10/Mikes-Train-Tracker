@@ -413,3 +413,23 @@ button.brow { width: 100%; border: 0; border-bottom: 1px solid var(--line); back
 .tchip.line i { background: rgba(11,13,18,0.92); color: #F5F5F7; font-weight: 600; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tchip.line b { border-radius: 6px 0 0 6px; }
 .row .lbar { width: 8px; height: 30px; border-radius: 3px; flex: none; }
+
+/* ---------- London Underground colours ----------
+   Anything Underground/DLR/tram (the LU map view, Tube station boards, Tube trains, line status)
+   uses present-day London transport colours: blue, white and red, instead of navy and gold. */
+body[data-theme="dark"].lu-mode[data-tab="map"], body[data-theme="dark"] .lu {
+  --navy: #0019A8; --trim: #FFFFFF; --primary: #FFFFFF; --lu-red: #E32017;
+  --bg: #050E3C; --card: #0C1A5E; --line: #253684; --text: #FFFFFF; --text2: #B7C0E6;
+}
+body[data-theme="light"].lu-mode[data-tab="map"], body[data-theme="light"] .lu {
+  --navy: #0019A8; --trim: #DC241F; --primary: #0019A8; --lu-red: #DC241F;
+  --bg: #FFFFFF; --card: #EEF1FB; --line: #D3D9F1; --text: #0A1240; --text2: #4A5582;
+}
+.sheet-card.lu, #boardsview.lu { background: var(--bg); }
+.sheet-card.lu { box-shadow: inset 0 4px 0 var(--lu-red), 0 -6px 20px rgba(0,0,0,0.25); }
+.lu .st-head .meta, .lu .head .sub > span:first-child { color: var(--text2); }
+.lu .hc { background: var(--navy); color: #FFFFFF; }
+.lu-boardname { display: flex; align-items: center; height: 40px; padding: 0 14px; border-radius: 10px; background: var(--navy); color: #FFFFFF;
+  font: 700 14px var(--display); letter-spacing: 0.02em; box-shadow: inset 4px 0 0 var(--lu-red); }
+.lu-boardname.pad { margin: 0 12px; }
+body.lu-mode[data-tab="map"] .lu-btn[aria-pressed="true"] { background: #FFFFFF; color: #0019A8; box-shadow: inset 0 0 0 2px var(--lu-red); }

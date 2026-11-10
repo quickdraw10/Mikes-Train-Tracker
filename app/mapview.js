@@ -174,11 +174,11 @@ function listSheet() {
     return `<button class="row" data-act="train" data-arg="${esc(t.id)}"><span class="hc b-${bd}">${esc(t.code)}</span>
       <span class="what">${esc(where)}${t.toc ? `<small class="sub-line">${opBadge(t.toc)}${esc(t.toc)}</small>` : ''}</span><span class="mins c-${bd}">${esc(shortLate(t.delay, t.cancelled))}</span></button>`;
   }).join('');
-  openSheet(`<div class="st-head"><div><div class="meta">${lastRes.mode === 'live' ? 'Live' : 'Demo'} · most late first</div><h2 id="sheet-title">${lastRes.total || 0} trains in view</h2></div></div>
+  openSheet(`<div class="st-head"><div><div class="meta">${lastRes.mode === 'live' ? 'Live' : 'Demo'} · ${luMode ? 'London Underground' : 'most late first'}</div><h2 id="sheet-title">${lastRes.total || 0} trains in view</h2></div></div>
     <div class="sheet-body list flush">${rows || '<div class="empty">No trains in view. Zoom out or move the map.</div>'}
     ${more > 0 ? `<p class="note">Showing the ${items.length} most late. Zoom in to see the other ${more}.</p>` : ''}</div>`, {
     train: (id) => { const t = items.find((x) => x.id === id); if (t) { closeCustomSheet(); selectTrain(t); } }
-  });
+  }, null, luMode ? 'lu' : null);
 }
 document.getElementById('map-count').addEventListener('click', listSheet);
 
@@ -192,7 +192,7 @@ function groupSheet(items) {
   openSheet(`<div class="st-head"><div><div class="meta">${items.length} trains</div><h2 id="sheet-title">${esc(here ? 'At or near ' + here : 'Trains here')}</h2></div></div>
     <div class="sheet-body list flush">${rows}</div>`, {
     train: (id) => { const t = items.find((x) => x.id === id); if (t) { closeCustomSheet(); selectTrain(t); } }
-  });
+  }, null, luMode ? 'lu' : null);
 }
 
 // ---------- selecting a train: its route so far on the map ----------
@@ -267,6 +267,10 @@ document.getElementById('sel-bar').addEventListener('click', (e) => {
 });
 
 // A board row as a train for the train screen, looked up from the board itself
+// Is this an Underground/DLR/tram train or stop? Those get the LU colours.
+export const isLu = (t) => !!t && (t.country === 'tfl' || /^tflp?:/.test(t.id || '') || /^tflp?:/.test((t.boardRef && t.boardRef.id) || ''));
+const isLuStation = (crs) => (BY_CRS.get(crs) || {}).country === 'tfl';
+
 export function boardTrain(row, crs, type, back) {
   return { id: null, code: row.headcode || '', delay: row.delay, cancelled: row.cancelled, toc: row.toc,
     dest: type === 'dep' ? row.place : null, origin: type === 'arr' ? row.place : null,
@@ -359,7 +363,7 @@ export async function trainSheet(t) {
       const r = routeFromStops(d && d.stops, origin && dest ? `${origin} – ${dest}` : null);
       if (r) { closeCustomSheet(); window.dispatchEvent(new CustomEvent('mtt:route', { detail: { route: r, train: t.code } })); }
     }
-  }, () => clearInterval(sheetTimer));
+  }, () => clearInterval(sheetTimer), isLu(t) ? 'lu' : null);
   load();
   sheetTimer = setInterval(load, 30000);
 }
@@ -386,16 +390,18 @@ export async function stationSheet(crs, type = 'dep') {
   const st = BY_CRS.get(crs);
   if (!st) return;
   clearInterval(sheetTimer);
-  let current = type;
+  const lu = isLuStation(crs);
+  // TfL gives one list of predicted trains, so an Underground station has one board, not two
+  let current = lu ? 'dep' : type;
   let data = null;
   const areas = loadList(AREAS_KEY);
   const saved = loadList(STATIONS_KEY);
   const html = () => `
     <div class="st-head"><div><div class="meta">${esc(crs)}</div><h2 id="sheet-title">${esc(st.name)}</h2></div></div>
-    <div class="segctl" role="tablist">
+    ${lu ? '<div class="lu-boardname">Arrivals / Departures</div>' : `<div class="segctl" role="tablist">
       <button role="tab" data-act="type" data-arg="dep" aria-selected="${current === 'dep'}">Departures</button>
       <button role="tab" data-act="type" data-arg="arr" aria-selected="${current === 'arr'}">Arrivals</button>
-    </div>
+    </div>`}
     <div class="sheet-body">${boardHTML(data, current)}</div>
     <div class="sheet-actions">
       <button data-act="watch">${areas.some((a) => a.crs === crs) ? 'Watching area' : 'Watch this area'}</button>
@@ -417,9 +423,9 @@ export async function stationSheet(crs, type = 'dep') {
       if (!list.some((s) => s.crs === crs)) { list.unshift({ crs, name: st.name }); saveList(STATIONS_KEY, list.slice(0, 12)); toast(`${st.name} saved to Boards`); }
       updateSheet(html());
     }
-  }, () => clearInterval(sheetTimer));
+  }, () => clearInterval(sheetTimer), lu ? 'lu' : null);
   load();
-  sheetTimer = setInterval(load, 60000);
+  sheetTimer = setInterval(load, lu ? 30000 : 60000);
 }
 
 // ---------- areas to keep an eye on ----------

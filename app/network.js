@@ -202,7 +202,7 @@ export function showNetwork(container, handlers) {
       if (tl) {
         const l = tflLines.find((x) => x.id === tl.dataset.tfl);
         if (l) openSheet(`<div class="st-head"><div><div class="meta">TfL line status</div><h2 id="sheet-title">${esc(l.name)}</h2></div></div>
-          <div class="sheet-body"><p class="c-${sevBand(l.severity)}" style="font-weight:700">${esc(l.status || '')}</p><p>${esc(l.reason || 'No disruption reported.')}</p><p class="credit">Powered by TfL Open Data</p></div>`, {});
+          <div class="sheet-body"><p class="c-${sevBand(l.severity)}" style="font-weight:700">${esc(l.status || '')}</p><p>${esc(l.reason || 'No disruption reported.')}</p><p class="credit">Powered by TfL Open Data</p></div>`, {}, null, 'lu');
         return;
       }
       const sg = e.target.closest('[data-seg]');

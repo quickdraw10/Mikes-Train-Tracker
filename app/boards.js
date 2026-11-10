@@ -87,6 +87,7 @@ function renderResults() {
 
 function render() {
   if (!current) {
+    $root.classList.remove('lu');
     const saved = loadList(STATIONS_KEY);
     $root.innerHTML = `
       <header class="head"><h1>Station boards</h1><div class="sub">Departures and arrivals for any station</div></header>
@@ -106,16 +107,20 @@ function render() {
     return;
   }
   const saved = loadList(STATIONS_KEY).some((s) => s.crs === current.crs);
+  // Underground stations: LU colours and one board (TfL gives one list of predicted trains)
+  const lu = (BY_CRS.get(current.crs) || {}).country === 'tfl';
+  if (lu) type = 'dep';
+  $root.classList.toggle('lu', lu);
   $root.innerHTML = `
     <header class="head">
       <button class="back" data-act="back">‹ Stations</button>
       <h1>${esc(current.name)}</h1>
       <div class="sub"><span>${esc(current.crs)}</span>${data && data.mode ? `<span class="pill ${data.mode === 'live' ? 'live' : 'demo'}">${data.mode === 'live' ? 'Live' : 'Demo'}</span>` : ''}</div>
     </header>
-    <div class="segctl pad" role="tablist">
+    ${lu ? '<div class="lu-boardname pad">Arrivals / Departures</div>' : `<div class="segctl pad" role="tablist">
       <button role="tab" data-act="type" data-arg="dep" aria-selected="${type === 'dep'}">Departures</button>
       <button role="tab" data-act="type" data-arg="arr" aria-selected="${type === 'arr'}">Arrivals</button>
-    </div>
+    </div>`}
     <section class="board">${boardHTML(data, type)}</section>
     <div class="sheet-actions pad"><button data-act="save">${saved ? 'Remove from saved' : 'Save station'}</button></div>`;
 }

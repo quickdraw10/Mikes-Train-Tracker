@@ -489,6 +489,7 @@ function render() {
 function switchTab(tab) {
   if (tab !== 'info') ui.lastTab = tab;
   ui.tab = tab;
+  document.body.dataset.tab = tab; // the LU colours apply on the map only while the LU view is on
   document.querySelectorAll('.tab').forEach((t) => { if (t.dataset.tab === tab) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current'); });
   window.scrollTo(0, 0);
   render();
