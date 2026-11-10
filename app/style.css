@@ -257,7 +257,10 @@ body[data-tab="map"] { overflow: hidden; }
 .sheet .credit { margin: 10px 0 0; }
 
 /* ---------- guide page ---------- */
-.info-btn { margin-left: auto; width: 36px; height: 36px; border: 0; border-radius: 18px; background: var(--navy); color: var(--trim); font: 700 17px Georgia, 'Times New Roman', serif; font-style: italic; box-shadow: inset 0 0 0 1.5px var(--trim); cursor: pointer; }
+.lu-btn { margin-left: auto; margin-right: 8px; height: 36px; padding: 0 11px 0 9px; display: inline-flex; align-items: center; gap: 5px; border: 0; border-radius: 18px; background: var(--navy); color: var(--trim); font: 700 13px var(--mono); letter-spacing: 0.04em; box-shadow: inset 0 0 0 1.5px var(--trim); cursor: pointer; }
+.lu-btn[aria-pressed="true"] { background: var(--trim); color: var(--navy); }
+.lu-btn:focus-visible { outline: 2px solid var(--trim); outline-offset: 2px; }
+.info-btn { width: 36px; height: 36px; border: 0; border-radius: 18px; background: var(--navy); color: var(--trim); font: 700 17px Georgia, 'Times New Roman', serif; font-style: italic; box-shadow: inset 0 0 0 1.5px var(--trim); cursor: pointer; }
 .info-btn:focus-visible { outline: 2px solid var(--trim); outline-offset: 2px; }
 .info .icard { margin: 0 12px 14px; padding: 16px; border-radius: 16px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); }
 .info h2 { margin: 0 0 8px; font: 700 18px var(--display); letter-spacing: -0.01em; }

@@ -27,11 +27,12 @@ async function get(path) {
   return body;
 }
 
-export async function trains(box, max) {
+// only: 'tfl' for the London Underground map view
+export async function trains(box, max, only) {
   await ready;
   if (mode === 'offline') return { ...OFFLINE };
-  if (mode === 'demo') return sim.trains(box);
-  return get(`/api/trains?w=${box.w}&s=${box.s}&e=${box.e}&n=${box.n}${max ? '&max=' + max : ''}`);
+  if (mode === 'demo') return only ? { mode: 'demo', total: 0, trains: [] } : sim.trains(box);
+  return get(`/api/trains?w=${box.w}&s=${box.s}&e=${box.e}&n=${box.n}${max ? '&max=' + max : ''}${only ? '&only=' + only : ''}`);
 }
 
 export async function board(crs, type) {

@@ -197,13 +197,10 @@ if (live) {
   const withIe = national;
   national = {
     ...withIe,
-    trains: (box, max = 600) => {
-      const r = withIe.trains(box, max);
-      if (box.e < -0.65 || box.w > 0.4 || box.n < 51.25 || box.s > 51.75) return r;
-      const extra = tflTrainsIn(tfl, box);
-      if (!extra.length) return r;
-      // TfL trains have no lateness, so they go after the National Rail ones
-      return { ...r, total: r.total + extra.length, trains: [...r.trains, ...extra].slice(0, max) };
+    // The main map shows the railway; the London Underground has its own map view (only=tfl)
+    trains: (box, max = 600, only) => {
+      if (only === 'tfl') { const t = tflTrainsIn(tfl, box); return { mode: 'live', total: t.length, trains: t.slice(0, max) }; }
+      return withIe.trains(box, max);
     },
     board: (crs, type) => (tfl.stations.has(crs) ? tflBoard(tfl, crs) : withIe.board(crs, type)),
     train: (id) => (String(id).startsWith('tfl:') ? tflTrain(tfl, id) : withIe.train(id)),
@@ -260,7 +257,7 @@ const server = http.createServer((req, res) => {
     const box = { w: num('w'), s: num('s'), e: num('e'), n: num('n') };
     if (![box.w, box.s, box.e, box.n].every(Number.isFinite)) return json(400, { error: 'Need w, s, e, n' });
     const max = Math.max(1, Math.min(2500, num('max') || 600));
-    return json(200, national.trains(box, max));
+    return json(200, national.trains(box, max, url.searchParams.get('only') || undefined));
   }
   if (url.pathname === '/api/moves') {
     const lat = num('lat'), lon = num('lon'), r = Math.min(50, num('km') || 15);

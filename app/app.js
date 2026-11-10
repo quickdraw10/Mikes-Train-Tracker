@@ -382,6 +382,7 @@ function routeBuilder(startCrs) {
 }
 
 window.addEventListener('mtt:route', (e) => { useRoute(e.detail.route); toast(e.detail.quiet ? `${e.detail.route.name} is now on the Route tab` : `Route set from ${e.detail.train}'s stops`); });
+window.addEventListener('mtt:maptab', () => { if (ui.tab !== 'map') switchTab('map'); });
 window.addEventListener('mtt:showtrain', (e) => { switchTab('map'); focusTrain(e.detail.train); });
 window.addEventListener('mtt:build', (e) => { switchTab('route'); routeBuilder(e.detail.crs); });
 

@@ -52,6 +52,28 @@ function start() {
   drawAreas();
 }
 
+// ---------- London Underground view ----------
+// The main map is the railway; the LU button switches the map to Tube, DLR and trams only.
+let luMode = false;
+try { luMode = localStorage.getItem('mtt.lu') === '1'; } catch { /* default off */ }
+const luBtn = document.getElementById('lu-btn');
+function setLu(on) {
+  luMode = on;
+  try { localStorage.setItem('mtt.lu', on ? '1' : '0'); } catch { /* not saved */ }
+  luBtn.setAttribute('aria-pressed', String(on));
+  luBtn.setAttribute('aria-label', on ? 'Back to the railway map' : 'Show the London Underground only');
+  document.body.classList.toggle('lu-mode', on);
+  if (selected) clearSelection();
+  if (!map) return;
+  // jump to London the first time the Tube view is opened somewhere else
+  if (on && !L.latLngBounds([[51.28, -0.6], [51.72, 0.35]]).contains(map.getCenter())) map.setView([51.512, -0.12], 12);
+  drawStations();
+  loadTrains();
+}
+luBtn.addEventListener('click', () => { window.dispatchEvent(new CustomEvent('mtt:maptab')); setLu(!luMode); });
+luBtn.setAttribute('aria-pressed', String(luMode));
+document.body.classList.toggle('lu-mode', luMode);
+
 // ---------- trains ----------
 let loading = false;
 async function loadTrains() {
@@ -59,7 +81,7 @@ async function loadTrains() {
   loading = true;
   try {
     const b = map.getBounds();
-    const res = await api.trains({ w: b.getWest(), s: b.getSouth(), e: b.getEast(), n: b.getNorth() });
+    const res = await api.trains({ w: b.getWest(), s: b.getSouth(), e: b.getEast(), n: b.getNorth() }, undefined, luMode ? 'tfl' : undefined);
     drawTrains(res);
   } catch { /* keep the last picture */ }
   loading = false;
@@ -98,7 +120,7 @@ function drawTrains(res) {
   const count = document.getElementById('map-count');
   const shown = list.length < (res.total || 0) ? `${list.length} of ${res.total}` : `${list.length}`;
   const late = list.filter((t) => t.band === 'mid' || t.band === 'bad').length;
-  count.innerHTML = `<span class="pill ${res.mode === 'live' ? 'live' : 'demo'}">${res.mode === 'live' ? 'Live' : 'Demo'}</span> ${shown} train${res.total === 1 ? '' : 's'} in view · <span class="c-mid">${late} late</span>${list.length < (res.total || 0) ? ' · zoom in for all' : ''}<span class="chev" aria-hidden="true">▾</span>`;
+  count.innerHTML = `<span class="pill ${res.mode === 'live' ? 'live' : 'demo'}">${res.mode === 'live' ? 'Live' : 'Demo'}</span> ${luMode ? 'Underground · ' : ''}${shown} train${res.total === 1 ? '' : 's'} in view${luMode ? '' : ` · <span class="c-mid">${late} late</span>`}${list.length < (res.total || 0) ? ' · zoom in for all' : ''}<span class="chev" aria-hidden="true">▾</span>`;
 }
 
 function groupByScreen(list, px) {
@@ -350,6 +372,9 @@ function drawStations() {
   const b = map.getBounds();
   for (const [crs, name, lat, lon] of STATIONS) {
     if (!b.contains([lat, lon])) continue;
+    // railway stations on the main map, Underground/DLR/tram stops in the LU view
+    const isTfl = (BY_CRS.get(crs) || {}).country === 'tfl';
+    if (isTfl !== luMode) continue;
     const m = L.circleMarker([lat, lon], { radius: 6, color: '#E3B53A', weight: 2, fillColor: '#0C1B38', fillOpacity: 1 });
     if (z >= LABEL_ZOOM) m.bindTooltip(name, { permanent: true, direction: 'right', offset: [8, 0], className: 'stn-label' });
     m.on('click', () => stationSheet(crs));
