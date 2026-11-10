@@ -30,7 +30,7 @@ export const CREWE = {
 // Hull Paragon is a terminus: every train comes in from the west (Brough / Selby line and the
 // Beverley line, which join outside the station), so the London side is the only way out.
 export const HULL = {
-  id: 'hul', name: 'Hull Paragon', subtitle: 'East Yorkshire', crs: 'HUL',
+  id: 'hul', name: 'Hull Paragon', subtitle: 'East Yorkshire', crs: 'HUL', stanme: 'HULL',
   ends: ['BROUGH · BEVERLEY', 'BUFFER STOPS']
 };
 // Doncaster: the London end is the south (Retford, Sheffield, Lincoln); north to York, Leeds and Hull

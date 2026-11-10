@@ -23,7 +23,7 @@ import { applyStanox, loadStanoxCrs, downloadCorpus, haveCorpus } from './corpus
 import { createNational, handleNational, trainsIn, movesNear, pruneNational, attachAll, liveDetailOf, linkPanelTrains, pathOf } from './national.js';
 import { staffBoard, loadReasons, reasonsStatus } from './staff.js';
 import { createTimetable, loadTimetable } from './timetable.js';
-import { downloadSmart, buildStationPanel, smartDebug } from './panelbuild.js';
+import { downloadSmart, buildStationPanel, smartDebug, smartFind } from './panelbuild.js';
 import { createDecoder } from './decode.js';
 import { getBoard, serviceDetail } from './ldb.js';
 import { createTfl, loadTflStations, pollTfl, pollTflStatus, tflTrainsIn, tflBoard, tflTrain, trackernetAuth, loadTflShapes } from './tfl.js';
@@ -45,6 +45,7 @@ let livePanels = null; // panel layouts built from SMART (live only)
 let ieState = null;
 let tflState = null;
 let panelDebug = null;
+let smartNames = null; // SMART station names / areas / STANOX, for /api/smart-find
 
 if (live) {
   raw = emptyState();
@@ -77,6 +78,7 @@ if (live) {
   const loadPanel = async () => {
     try {
       const smart = await downloadSmart(user, pass);
+      smartNames = smartFind(smart, ''); // a small index of names, not the whole file
       livePanels = STATION_PANELS.map((cfg) => {
         const c = { ...cfg, stanox: crsStanox[cfg.crs] || null };
         const built = buildStationPanel(smart, c);
@@ -368,6 +370,12 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (url.pathname === '/api/reasons-debug') return json(200, reasonsStatus());
+  if (url.pathname === '/api/smart-find') {
+    // how a station appears in Network Rail's SMART berth data, e.g. ?q=HULL
+    if (!smartNames) return json(200, { note: 'SMART not loaded yet (or demo mode)' });
+    const q = (url.searchParams.get('q') || '').toUpperCase().trim();
+    return json(200, { q, matches: smartNames.filter((m) => !q || m.stanme.toUpperCase().includes(q) || m.stanox === q).slice(0, 40) });
+  }
   if (url.pathname === '/api/panel-debug') {
     if (!panelDebug) return json(200, { note: 'Demo mode' });
     const id = url.searchParams.get('id');

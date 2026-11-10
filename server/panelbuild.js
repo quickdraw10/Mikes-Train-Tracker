@@ -36,8 +36,9 @@ function stationRows(smart, cfg) {
     const here = rows.filter((r) => want.has(String(r.STANOX || '').trim()) && (r.PLATFORM || '').trim());
     if (here.length) return here;
   }
-  if (!cfg.area || !cfg.stanme) return [];
-  const inArea = rows.filter((r) => (r.TD || '').trim() === cfg.area);
+  if (!cfg.stanme) return [];
+  // no area given: look for the station's SMART name anywhere (platform rows only)
+  const inArea = cfg.area ? rows.filter((r) => (r.TD || '').trim() === cfg.area) : rows.filter((r) => (r.PLATFORM || '').trim());
   const want = cfg.stanme.toUpperCase();
   const exact = inArea.filter((r) => (r.STANME || '').trim().toUpperCase() === want);
   return exact.length ? exact : inArea.filter((r) => (r.STANME || '').trim().toUpperCase().startsWith(want));
@@ -166,6 +167,22 @@ export function buildStationPanel(smart, cfg) {
 }
 
 // For checking the result from a phone: the raw SMART rows behind the panel
+// For finding how a station is named in SMART: every name/area/STANOX matching the search
+export function smartFind(smart, q) {
+  const want = String(q || '').toUpperCase().trim();
+  const out = {};
+  for (const r of smart.BERTHDATA || []) {
+    const n = (r.STANME || '').trim();
+    if (!want || !n.toUpperCase().includes(want)) continue;
+    const k = `${n}|${(r.TD || '').trim()}|${(r.STANOX || '').trim()}`;
+    const o = out[k] || (out[k] = { stanme: n, td: (r.TD || '').trim(), stanox: (r.STANOX || '').trim(), rows: 0, platformRows: 0, platforms: [] });
+    o.rows++;
+    const pl = (r.PLATFORM || '').trim();
+    if (pl) { o.platformRows++; if (!o.platforms.includes(pl)) o.platforms.push(pl); }
+  }
+  return Object.values(out).sort((a, b) => b.platformRows - a.platformRows || b.rows - a.rows);
+}
+
 export function smartDebug(smart, cfg) {
   const here = stationRows(smart, cfg);
   const areas = [...new Set(here.map((r) => (r.TD || '').trim()))];
