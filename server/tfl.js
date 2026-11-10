@@ -223,17 +223,33 @@ export async function tflBoard(tfl, code) {
   const preds = await get(`/StopPoint/${encodeURIComponent(code)}/Arrivals`);
   const st = tfl.stations.get(code);
   preds.sort((a, b) => a.timeToStation - b.timeToStation);
-  const services = preds.slice(0, 30).map((p) => {
+  const services = preds.slice(0, 80).map((p) => {
     const line = TFL_LINES[p.lineId] || { name: p.lineName };
     const v = String(p.vehicleId || '').trim();
     return { id: v && !/^0+$/.test(v) ? `tfl:${p.lineId}:${v}` : `tflp:${p.id}`, headcode: null, booked: clock(p.expectedArrival), expected: due(p.timeToStation),
       delay: null, cancelled: false, place: tidy(p.destinationName) || p.towards || 'Check front of train', platform: (/(\d+)\s*$/.exec(p.platformName || '') || [])[1] || null,
-      toc: `${line.name}${p.platformName ? ' · ' + p.platformName : ''}`, tocCode: null, next: p.currentLocation || null, nextLabel: 'Now', reason: null, length: null };
+      toc: `${line.name}${p.platformName ? ' · ' + p.platformName : ''}`, tocCode: null, next: p.currentLocation || null, nextLabel: 'Now', reason: null, length: null,
+      bound: boundOf(p), line: p.lineId, secs: p.timeToStation };
   });
+  // the directions at this station, in a fixed order (N, S, E, W, then anything else TfL names)
+  const bounds = [...new Set(services.map((s) => s.bound))].sort((a, b) => boundRank(a) - boundRank(b) || a.localeCompare(b));
   const crowd = st && st.lines.some((l) => TRACKERNET[l]) ? await tflCrowding(code) : null;
-  return { mode: 'live', source: 'tfl', crs: code, name: st ? st.name : tidy(preds[0] && preds[0].stationName) || code, services, messages: crowd ? [crowd] : [], predictions: true,
+  return { mode: 'live', source: 'tfl', crs: code, name: st ? st.name : tidy(preds[0] && preds[0].stationName) || code, services, bounds, messages: crowd ? [crowd] : [], predictions: true,
     credit: 'Powered by TfL Open Data' };
 }
+
+// Which way a train is heading at this station, as TfL names the platform ("Northbound - Platform 1").
+// Where the platform has no direction in its name (DLR, trams), the platform itself is used.
+export function boundOf(p) {
+  const name = String(p.platformName || '').trim();
+  const m = /^(North|South|East|West)bound\b/i.exec(name) || /^(Inner|Outer)\s+Rail\b/i.exec(name);
+  if (m) return m[0].replace(/\b\w/g, (c) => c.toUpperCase()).replace(/bound$/i, 'bound');
+  const plat = /(Platform\s*\w+)\s*$/i.exec(name);
+  if (plat) return plat[1].replace(/^platform/i, 'Platform');
+  return 'Other';
+}
+const BOUND_ORDER = ['Northbound', 'Southbound', 'Eastbound', 'Westbound', 'Inner Rail', 'Outer Rail'];
+const boundRank = (b) => (BOUND_ORDER.includes(b) ? BOUND_ORDER.indexOf(b) : /^Platform/.test(b) ? 10 : 20);
 
 // One train's next stops, from TfL's predictions for that train
 export async function tflTrain(tfl, id) {

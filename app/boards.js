@@ -3,13 +3,14 @@
 
 import * as api from './api.js';
 import { BY_CRS, nearest, searchStations } from './geo.js';
-import { esc, loadList, saveList, toast, boardHTML } from './ui.js';
+import { esc, loadList, saveList, toast, boardHTML, luBoardHTML } from './ui.js';
 import { trainSheet, boardTrain } from './mapview.js';
 
 const STATIONS_KEY = 'mtt.stations';
 const $root = document.getElementById('boardsview');
 let current = null;     // { crs, name }
 let type = 'dep';
+let bound = null; // Underground: which direction's tab is open
 let data = null;
 let timer;
 let near = [];
@@ -30,6 +31,7 @@ function wire() {
     if (!el) return;
     if (el.dataset.crs) return pick(el.dataset.crs);
     const act = el.dataset.act;
+    if (act === 'bound') { bound = el.dataset.arg; render(); }
     if (act === 'type') { type = el.dataset.arg; data = null; render(); load(); }
     if (act === 'back') { current = null; clearInterval(timer); render(); }
     if (act === 'near') findNear();
@@ -48,6 +50,7 @@ function pick(crs) {
   if (!st) return;
   current = { crs, name: st.name };
   data = null;
+  bound = null;
   render();
   load();
 }
@@ -110,6 +113,8 @@ function render() {
   // Underground stations: LU colours and one board (TfL gives one list of predicted trains)
   const lu = (BY_CRS.get(current.crs) || {}).country === 'tfl';
   if (lu) type = 'dep';
+  const luv = lu ? luBoardHTML(data, bound) : null;
+  if (luv && luv.bound) bound = luv.bound;
   $root.classList.toggle('lu', lu);
   $root.innerHTML = `
     <header class="head">
@@ -117,10 +122,10 @@ function render() {
       <h1>${esc(current.name)}</h1>
       <div class="sub"><span>${esc(current.crs)}</span>${data && data.mode ? `<span class="pill ${data.mode === 'live' ? 'live' : 'demo'}">${data.mode === 'live' ? 'Live' : 'Demo'}</span>` : ''}</div>
     </header>
-    ${lu ? '<div class="lu-boardname pad">Arrivals / Departures</div>' : `<div class="segctl pad" role="tablist">
+    ${lu ? `<div class="pad">${luv.tabs}</div>` : `<div class="segctl pad" role="tablist">
       <button role="tab" data-act="type" data-arg="dep" aria-selected="${type === 'dep'}">Departures</button>
       <button role="tab" data-act="type" data-arg="arr" aria-selected="${type === 'arr'}">Arrivals</button>
     </div>`}
-    <section class="board">${boardHTML(data, type)}</section>
+    <section class="board">${lu ? luv.body : boardHTML(data, type)}</section>
     <div class="sheet-actions pad"><button data-act="save">${saved ? 'Remove from saved' : 'Save station'}</button></div>`;
 }

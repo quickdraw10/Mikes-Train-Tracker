@@ -23,6 +23,21 @@ const $card = $sheet.querySelector('.sheet-card');
 let actions = {};
 let onClose = null;
 
+// An Underground station's board, split by direction (Northbound / Southbound, Eastbound / Westbound …)
+// so you can see how often trains run each way. Tabs come from TfL's own platform names.
+export function luBoardHTML(b, bound) {
+  if (!b || b.error || !b.bounds || !b.bounds.length) return { tabs: '<div class="lu-boardname">Trains by direction</div>', body: boardHTML(b, 'dep'), bound: null };
+  const pick = b.bounds.includes(bound) ? bound : b.bounds[0];
+  const n = b.bounds.length;
+  const tabs = `<div class="segctl lu-dirs" role="tablist" style="grid-template-columns: repeat(${n === 4 ? 2 : Math.min(n, 3)}, minmax(0, 1fr))">${b.bounds.map((x) =>
+    `<button role="tab" data-act="bound" data-arg="${esc(x)}" aria-selected="${x === pick}">${esc(x)}</button>`).join('')}</div>`;
+  const list = b.services.filter((s) => s.bound === pick);
+  const soon = list.filter((s) => typeof s.secs === 'number' && s.secs <= 1200).length;
+  const lines = [...new Set(list.map((s) => String(s.toc || '').split(' · ')[0]).filter(Boolean))];
+  const head = `<p class="lu-freq"><b>${soon}</b> train${soon === 1 ? '' : 's'} ${esc(pick.toLowerCase().startsWith('platform') ? 'from ' + pick : pick.toLowerCase())} in the next 20 minutes${lines.length ? ' · ' + esc(lines.join(', ')) : ''}</p>`;
+  return { tabs, body: head + boardHTML({ ...b, services: list }, 'dep'), bound: pick };
+}
+
 // theme 'lu' gives the sheet the London Underground colours
 export function openSheet(html, acts = {}, close = null, theme = null) {
   actions = acts;

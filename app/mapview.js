@@ -7,7 +7,7 @@ import * as api from './api.js';
 import { STATIONS } from './stations.js';
 import { BY_CRS, nearest, searchStations } from './geo.js';
 import { routeFromStops } from './route.js';
-import { opBadge, esc, hhmm, lateText, shortLate, bandOf, openSheet, updateSheet, sheetOpen, closeCustomSheet, loadList, saveList, toast, boardHTML } from './ui.js';
+import { opBadge, esc, hhmm, lateText, shortLate, bandOf, openSheet, updateSheet, sheetOpen, closeCustomSheet, loadList, saveList, toast, boardHTML, luBoardHTML } from './ui.js';
 
 const AREAS_KEY = 'mtt.areas';
 const STATIONS_KEY = 'mtt.stations';
@@ -452,27 +452,30 @@ export async function stationSheet(crs, type = 'dep') {
   const lu = isLuStation(crs);
   // TfL gives one list of predicted trains, so an Underground station has one board, not two
   let current = lu ? 'dep' : type;
+  let bound = null; // Underground: which direction's tab is open
   let data = null;
   const areas = loadList(AREAS_KEY);
   const saved = loadList(STATIONS_KEY);
   const html = () => `
     <div class="st-head"><div><div class="meta">${lu ? esc((/\((Underground|DLR|Tram)\)$/.exec(st.name) || [, 'Underground'])[1]) : esc(crs)}</div><h2 id="sheet-title">${esc(lu ? luShort(st.name) : st.name)}</h2></div></div>
-    ${lu ? '<div class="lu-boardname">Arrivals / Departures</div>' : `<div class="segctl" role="tablist">
+    ${lu ? luView().tabs : `<div class="segctl" role="tablist">
       <button role="tab" data-act="type" data-arg="dep" aria-selected="${current === 'dep'}">Departures</button>
       <button role="tab" data-act="type" data-arg="arr" aria-selected="${current === 'arr'}">Arrivals</button>
     </div>`}
-    <div class="sheet-body">${boardHTML(data, current)}</div>
+    <div class="sheet-body">${lu ? luView().body : boardHTML(data, current)}</div>
     <div class="sheet-actions">
       <button data-act="watch">${areas.some((a) => a.crs === crs) ? 'Watching area' : 'Watch this area'}</button>
       <button data-act="save">${saved.some((s) => s.crs === crs) ? 'Saved' : 'Save station'}</button>
     </div>
     <div class="sheet-actions one"><button data-act="build">Build a route from here</button></div>`;
+  const luView = () => { const v = luBoardHTML(data, bound); if (v.bound) bound = v.bound; return v; };
   async function load() {
     data = await api.board(crs, current).catch((e) => ({ error: e.message }));
     if (sheetOpen()) updateSheet(html());
   }
   openSheet(html(), {
     type: (t) => { current = t; data = null; updateSheet(html()); load(); },
+    bound: (b) => { bound = b; updateSheet(html()); },
     watch: () => { watchArea(st); updateSheet(html()); },
     // a train on the board: its own screen, with a way back to this board
     svc: (id) => { const row = data && data.services && data.services.find((x) => x.id === id); if (row) trainSheet(boardTrain(row, crs, current, () => stationSheet(crs, current))); },

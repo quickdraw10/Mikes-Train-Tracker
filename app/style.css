@@ -442,3 +442,7 @@ body.lu-mode[data-tab="map"] .lu-btn[aria-pressed="true"] { background: #FFFFFF;
 .lul i { width: 6px; height: 18px; border-radius: 2px; background: var(--lc); box-shadow: 0 0 0 1px rgba(255,255,255,0.5); flex: none; }
 .lul.all { justify-content: center; }
 .lul[aria-pressed="true"] { background: #FFFFFF; color: #0019A8; box-shadow: inset 0 0 0 2px #DC241F; }
+.lu-dirs { gap: 4px; }
+.lu-dirs button { font-size: 13px; padding: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lu-freq { margin: 0 0 8px; font-size: 13px; color: var(--text2); }
+.lu-freq b { color: var(--text); font-size: 15px; }

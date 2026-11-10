@@ -1,6 +1,6 @@
 // Tests for the TfL adapter: names and placing trains from TfL's location text.
 import assert from 'node:assert/strict';
-import { tidy, placeFromText, createTfl, tflTrainsIn, parseSummary } from './tfl.js';
+import { tidy, placeFromText, createTfl, tflTrainsIn, parseSummary, boundOf } from './tfl.js';
 
 let passed = 0;
 const test = (name, fn) => { fn(); passed++; console.log('  ✓', name); };
@@ -51,6 +51,14 @@ test('Trackernet summary: every train by set number, with its location and time 
   assert.equal(r[0].station, 'Bank');
   assert.equal(r[0].secs, 150);
   assert.equal(r[2].station, "St. Paul's");
+});
+
+test('board direction from TfL platform names; platform itself when no direction is named', () => {
+  assert.equal(boundOf({ platformName: 'Northbound - Platform 1' }), 'Northbound');
+  assert.equal(boundOf({ platformName: 'Westbound - Platform 3' }), 'Westbound');
+  assert.equal(boundOf({ platformName: 'Inner Rail - Platform 2' }), 'Inner Rail');
+  assert.equal(boundOf({ platformName: 'Platform 2' }), 'Platform 2');
+  assert.equal(boundOf({ platformName: '' }), 'Other');
 });
 
 console.log(`\n${passed} TfL tests passed`);
