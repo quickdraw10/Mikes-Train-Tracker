@@ -63,6 +63,7 @@ function setLu(on) {
   luBtn.setAttribute('aria-pressed', String(on));
   luBtn.setAttribute('aria-label', on ? 'Back to the railway map' : 'Show the London Underground only');
   document.body.classList.toggle('lu-mode', on);
+  drawLinePicker();
   if (selected) clearSelection();
   if (!map) return;
   // jump to London the first time the Tube view is opened somewhere else
@@ -70,9 +71,44 @@ function setLu(on) {
   drawStations();
   loadTrains();
 }
+// Line filter: pick up to 3 lines to show on their own (none picked = every line)
+const LU_LINES = {
+  bakerloo: { short: 'BAK', name: 'Bakerloo', color: '#B36305' }, central: { short: 'CEN', name: 'Central', color: '#E32017' },
+  circle: { short: 'CIR', name: 'Circle', color: '#FFD300' }, district: { short: 'DIS', name: 'District', color: '#00782A' },
+  'hammersmith-city': { short: 'H&C', name: 'Hammersmith & City', color: '#F3A9BB' }, jubilee: { short: 'JUB', name: 'Jubilee', color: '#A0A5A9' },
+  metropolitan: { short: 'MET', name: 'Metropolitan', color: '#9B0056' }, northern: { short: 'NOR', name: 'Northern', color: '#000000' },
+  piccadilly: { short: 'PIC', name: 'Piccadilly', color: '#003688' }, victoria: { short: 'VIC', name: 'Victoria', color: '#0098D4' },
+  'waterloo-city': { short: 'W&C', name: 'Waterloo & City', color: '#95CDBA' }, dlr: { short: 'DLR', name: 'DLR', color: '#00A4A7' },
+  tram: { short: 'TRM', name: 'Trams', color: '#84B817' }
+};
+const MAX_LINES = 3;
+let luLines = [];
+try { luLines = JSON.parse(localStorage.getItem('mtt.lulines') || '[]').filter((l) => LU_LINES[l]).slice(0, MAX_LINES); } catch { /* none */ }
+const $lines = document.getElementById('lu-lines');
+function drawLinePicker() {
+  $lines.hidden = !luMode;
+  if (!luMode) return;
+  $lines.innerHTML = `<button class="lul all" data-line="" aria-pressed="${!luLines.length}">All</button>` +
+    Object.entries(LU_LINES).map(([id, l]) => `<button class="lul" data-line="${id}" aria-pressed="${luLines.includes(id)}" aria-label="${esc(l.name)}" style="--lc:${l.color}"><i></i>${esc(l.short)}</button>`).join('');
+}
+$lines.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-line]');
+  if (!b) return;
+  const id = b.dataset.line;
+  if (!id) luLines = [];
+  else if (luLines.includes(id)) luLines = luLines.filter((x) => x !== id);
+  else if (luLines.length >= MAX_LINES) { toast(`Up to ${MAX_LINES} lines at a time. Tap one to remove it.`); return; }
+  else luLines = [...luLines, id];
+  try { localStorage.setItem('mtt.lulines', JSON.stringify(luLines)); } catch { /* not saved */ }
+  if (selected && luLines.length && selected.line && !luLines.includes(selected.line)) clearSelection();
+  drawLinePicker();
+  if (map) { drawStations(); if (lastRes) drawTrains(lastRes); }
+});
+
 luBtn.addEventListener('click', () => { window.dispatchEvent(new CustomEvent('mtt:maptab')); setLu(!luMode); });
 luBtn.setAttribute('aria-pressed', String(luMode));
 document.body.classList.toggle('lu-mode', luMode);
+drawLinePicker();
 
 // ---------- trains ----------
 let loading = false;
@@ -99,7 +135,7 @@ function drawTrains(res) {
   lastRes = res;
   trainLayer.clearLayers();
   const z = map.getZoom();
-  const list = res.trains || [];
+  const list = (res.trains || []).filter((t) => !luMode || !luLines.length || luLines.includes(t.line));
   if (z >= CHIP_ZOOM) {
     // Trains drawn on top of each other (e.g. waiting at the same station) become one bubble
     // the selected train always gets its own chip, on top
@@ -118,9 +154,10 @@ function drawTrains(res) {
     }
   }
   const count = document.getElementById('map-count');
-  const shown = list.length < (res.total || 0) ? `${list.length} of ${res.total}` : `${list.length}`;
+  const total = luMode && luLines.length ? list.length : res.total || 0;
+  const shown = list.length < total ? `${list.length} of ${total}` : `${list.length}`;
   const late = list.filter((t) => t.band === 'mid' || t.band === 'bad').length;
-  count.innerHTML = `<span class="pill ${res.mode === 'live' ? 'live' : 'demo'}">${res.mode === 'live' ? 'Live' : 'Demo'}</span> ${luMode ? 'Underground · ' : ''}${shown} train${res.total === 1 ? '' : 's'} in view${luMode ? '' : ` · <span class="c-mid">${late} late</span>`}${list.length < (res.total || 0) ? ' · zoom in for all' : ''}<span class="chev" aria-hidden="true">▾</span>`;
+  count.innerHTML = `<span class="pill ${res.mode === 'live' ? 'live' : 'demo'}">${res.mode === 'live' ? 'Live' : 'Demo'}</span> ${luMode ? (luLines.length ? esc(luLines.map((l) => LU_LINES[l].short).join(' · ')) + ' · ' : 'Underground · ') : ''}${shown} train${total === 1 ? '' : 's'} in view${luMode ? '' : ` · <span class="c-mid">${late} late</span>`}${list.length < total ? ' · zoom in for all' : ''}<span class="chev" aria-hidden="true">▾</span>`;
 }
 
 function groupByScreen(list, px) {
@@ -387,6 +424,7 @@ function drawStations() {
     // railway stations on the main map, Underground/DLR/tram stops in the LU view
     const isTfl = (BY_CRS.get(crs) || {}).country === 'tfl';
     if (isTfl !== luMode) continue;
+    if (luMode && luLines.length && !((BY_CRS.get(crs) || {}).lines || []).some((l) => luLines.includes(l))) continue;
     let m;
     if (luMode) {
       // Underground: small white stops; names only for a few landmark stations until zoomed right in.
@@ -394,7 +432,8 @@ function drawStations() {
       const short = luShort(name);
       m = L.circleMarker([lat, lon], { radius: z >= 15 ? 5 : 4, color: '#FFFFFF', weight: 2, fillColor: '#0019A8', fillOpacity: 1 });
       const st = BY_CRS.get(crs) || {};
-      const show = z >= 16 || (z >= 15 && (st.nLines || 1) >= 2) || (z >= 12 && LU_KEY.has(short.toLowerCase()));
+      // with lines chosen there are far fewer stops, so they're all named from zoom 13
+      const show = z >= 16 || (luLines.length && z >= 13) || (z >= 15 && (st.nLines || 1) >= 2) || (z >= 12 && LU_KEY.has(short.toLowerCase()));
       if (show && !labelled.has(short)) { labelled.add(short); m.bindTooltip(short, { permanent: true, direction: 'right', offset: [7, 0], className: 'stn-label lu-label' }); }
       else m.bindTooltip(short, { direction: 'top', offset: [0, -6], className: 'stn-label lu-label' });
     } else {

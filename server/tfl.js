@@ -32,11 +32,29 @@ const STATUS_MODES = 'tube,dlr,overground,elizabeth-line,tram';
 // Needs TFL_KEY. Line codes from TfL's Trackernet guide; H covers Hammersmith & City and Circle.
 const TRACKERNET = { bakerloo: 'B', central: 'C', district: 'D', 'hammersmith-city': 'H', jubilee: 'J', metropolitan: 'M', northern: 'N', piccadilly: 'P', victoria: 'V', 'waterloo-city': 'W' };
 
+// TfL's portal accepts the key in different places for different APIs, so Trackernet tries each
+// (query string, app_key header, the portal's subscription header) and remembers the one that works.
+const KEY_WAYS = [
+  (url, key) => [`${url}${url.includes('?') ? '&' : '?'}app_key=${encodeURIComponent(key)}`, {}],
+  (url, key) => [url, { app_key: key }],
+  (url, key) => [url, { 'Ocp-Apim-Subscription-Key': key }]
+];
+let keyWay = null;
+export const trackernetAuth = () => (keyWay == null ? 'not yet' : ['query app_key', 'app_key header', 'subscription header'][keyWay]);
 async function getText(path) {
   const key = process.env.TFL_KEY;
-  const res = await fetch(`${BASE}${path}`, { headers: { 'user-agent': 'MikesTrainTracker/1.0', ...(key ? { app_key: key } : {}) }, signal: AbortSignal.timeout(15000) });
-  if (!res.ok) throw new Error(`TfL returned ${res.status}`);
-  return res.text();
+  const base = { 'user-agent': 'MikesTrainTracker/1.0' };
+  const order = !key ? [] : keyWay != null ? [keyWay] : [0, 1, 2];
+  let last = 0;
+  for (const i of order) {
+    const [url, h] = KEY_WAYS[i](`${BASE}${path}`, key);
+    const res = await fetch(url, { headers: { ...base, ...h }, signal: AbortSignal.timeout(15000) });
+    if (res.ok) { keyWay = i; return res.text(); }
+    last = res.status;
+    if (res.status !== 401 && res.status !== 403) break;
+  }
+  if (!key) { const res = await fetch(`${BASE}${path}`, { headers: base, signal: AbortSignal.timeout(15000) }); if (res.ok) return res.text(); last = res.status; }
+  throw new Error(`TfL returned ${last}`);
 }
 
 // <S Code="BNK" N="Bank."><P N="Westbound - Platform 1" Code="0"><T S="051" T="12" D="..." C="2:30" L="Between X and Y" DE="Ealing Broadway"/></P></S>
@@ -191,7 +209,7 @@ export function tflTrainsIn(tfl, box) {
   const out = [];
   for (const t of tfl.trains.values()) {
     if (t.lat < box.s || t.lat > box.n || t.lon < box.w || t.lon > box.e) continue;
-    out.push({ id: t.id, code: t.code, lat: t.lat, lon: t.lon, delay: null, cancelled: false, color: t.color,
+    out.push({ id: t.id, code: t.code, lat: t.lat, lon: t.lon, delay: null, cancelled: false, color: t.color, line: t.line,
       toc: t.lineName, origin: null, dest: t.dest, last: t.where, lastEvent: null, next: t.next, country: 'tfl' });
   }
   return out;
