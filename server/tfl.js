@@ -147,11 +147,17 @@ export function placeFromText(text, names, nextName) {
 export async function pollTfl(tfl, now = Date.now()) {
   const trains = new Map();
   const viaTrackernet = new Set();
-  if (process.env.TFL_KEY) {
+  // If TfL refuses Trackernet (not part of the key's subscription), stop asking for 30 minutes
+  // so the refused calls don't use up the key's request allowance; the Unified feed covers the trains.
+  if (process.env.TFL_KEY && Date.now() >= (tfl.trackernetPauseUntil || 0)) {
     for (const [id, code] of Object.entries(TRACKERNET)) {
       if (id === 'hammersmith-city' && viaTrackernet.has('circle')) continue;
       let rows;
-      try { rows = parseSummary(await getText(`/PredictionSummary/${code}`)); } catch (e) { tfl.error = `Trackernet ${code}: ${e.message}`; continue; }
+      try { rows = parseSummary(await getText(`/PredictionSummary/${code}`)); } catch (e) {
+        tfl.error = `Trackernet ${code}: ${e.message}`;
+        if (/40[13]/.test(e.message)) { tfl.trackernetPauseUntil = Date.now() + 30 * 60000; tfl.error = `Trackernet: ${e.message} (not on this key's subscription?) — retrying in 30 min`; break; }
+        continue;
+      }
       if (!rows.length) continue;
       viaTrackernet.add(id);
       if (code === 'H') viaTrackernet.add('circle');
