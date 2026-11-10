@@ -243,6 +243,18 @@ const server = http.createServer((req, res) => {
     // stations outside Great Britain the app can show (Ireland so far)
     return json(200, { stations: ieState ? [...ieState.stations.values()] : [] });
   }
+  if (url.pathname === '/api/ni-raw') {
+    // Fetch Translink's open data (or its Worldline backup) as the server sees it, to
+    // check the format. Only these two sites, read-only, first 20,000 characters.
+    const want = url.searchParams.get('u') || 'https://apis.opendatani.gov.uk/translink/';
+    let target;
+    try { target = new URL(want); } catch { return json(400, { error: 'Bad address' }); }
+    if (!['apis.opendatani.gov.uk', 'tiger.worldline.global'].includes(target.hostname)) return json(400, { error: 'Only Translink open data addresses' });
+    fetch(target, { headers: { 'user-agent': 'MikesTrainTracker/1.0' }, signal: AbortSignal.timeout(15000) })
+      .then(async (r) => json(200, { url: target.href, status: r.status, type: r.headers.get('content-type'), cached: r.headers.get('x-cached'), body: (await r.text()).slice(0, 20000) }))
+      .catch((e) => json(200, { url: target.href, error: e.message }));
+    return;
+  }
   if (url.pathname === '/api/ie-debug') return json(200, ieState ? { trains: ieState.trains.size, stations: ieState.stations.size, at: ieState.at ? new Date(ieState.at).toISOString() : null, error: ieState.error, sample: [...ieState.trains.values()].slice(0, 3) } : { note: 'Not running (demo mode)' });
   const tm = /^\/api\/train\/([A-Za-z0-9:% ]{4,40})$/.exec(decodeURIComponent(url.pathname));
   if (tm) {
