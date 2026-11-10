@@ -382,7 +382,7 @@ function routeBuilder(startCrs) {
 }
 
 window.addEventListener('mtt:route', (e) => { useRoute(e.detail.route); toast(e.detail.quiet ? `${e.detail.route.name} is now on the Route tab` : `Route set from ${e.detail.train}'s stops`); });
-window.addEventListener('mtt:tubemap', () => showNetworkPage('tube'));
+window.addEventListener('mtt:tubemap', () => showNetworkPage('status'));
 window.addEventListener('mtt:showtrain', (e) => { switchTab('map'); focusTrain(e.detail.train); });
 window.addEventListener('mtt:build', (e) => { switchTab('route'); routeBuilder(e.detail.crs); });
 
@@ -515,7 +515,7 @@ function switchTab(tab) {
   if (tab === 'route') startRoute();
   if (tab === 'network') {
     showNetwork(document.getElementById('netview'), { train: trainSheet, station: (crs) => stationSheet(crs) });
-    if (isLuMode()) requestAnimationFrame(() => showNetworkPage('tube', false)); // coming from the Underground map: open at the Tube map
+    if (isLuMode()) requestAnimationFrame(() => showNetworkPage('status', false)); // coming from the Underground map: open at Tube status
   }
 }
 

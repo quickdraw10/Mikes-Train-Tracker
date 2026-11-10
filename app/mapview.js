@@ -151,7 +151,7 @@ $lines.addEventListener('click', (e) => {
   if (map) { drawLuLines(); drawStations(); if (lastRes) drawTrains(lastRes); }
 });
 
-// The LU button works on the Map (switches to the Underground map) and on Network (jumps to the Tube map page)
+// The LU button works on the Map (switches to the Underground map) and on Network (jumps to Tube status)
 luBtn.addEventListener('click', () => {
   const tab = document.body.dataset.tab;
   if (tab === 'network') { window.dispatchEvent(new CustomEvent('mtt:tubemap')); return; }
