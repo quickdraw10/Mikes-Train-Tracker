@@ -1,6 +1,6 @@
 // Tests for the Irish Rail adapter, with replies in Irish Rail's published format.
 import assert from 'node:assert/strict';
-import { parseList, parseMessage, createIrish, irishTrainsIn } from './ie.js';
+import { parseList, parseMessage, createIrish, irishTrainsIn, hm } from './ie.js';
 
 let passed = 0;
 const test = (name, fn) => { fn(); passed++; console.log('  ✓', name); };
@@ -31,6 +31,12 @@ test('only trains inside the map view are returned', () => {
   const r = irishTrainsIn(ie, { w: -6.5, e: -6.0, s: 53.2, n: 53.5 });
   assert.deepEqual(r.map((t) => t.code), ['E1']);
   assert.equal(r[0].country, 'ie');
+});
+
+test('00:00:00 means no time, not midnight', () => {
+  assert.equal(hm('00:00:00'), null);
+  assert.equal(hm('09:07:00'), '09:07');
+  assert.equal(hm(''), null);
 });
 
 console.log(`\n${passed} Irish Rail tests passed`);

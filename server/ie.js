@@ -41,8 +41,10 @@ async function get(path) {
   throw last;
 }
 
-const hm = (v) => { const m = /^(\d\d):(\d\d)/.exec(v || ''); return m && v !== '00:00' ? `${m[1]}:${m[2]}` : null; };
-const cap = (s) => (s || '').toLowerCase().replace(/(^|[\s(/-])(\p{L})/gu, (a, b, c) => b + c.toUpperCase());
+// "09:07:00" -> "09:07"; Irish Rail uses 00:00:00 for "no time" (e.g. no arrival at the origin)
+export const hm = (v) => { const m = /^(\d\d):(\d\d)/.exec(v || ''); return m && !(m[1] === '00' && m[2] === '00') ? `${m[1]}:${m[2]}` : null; };
+// Only tidy names that come in capitals; leave properly written names as they are
+const cap = (s) => (s && s === s.toUpperCase() ? s.toLowerCase().replace(/(^|[\s(/-])(\p{L})/gu, (a, b, c) => b + c.toUpperCase()) : s || '');
 
 // "AA509\n11:00 - Waterford to Dublin Heuston (0 mins late)\nDeparted Waterford next stop Thomastown"
 export function parseMessage(msg) {
@@ -136,9 +138,11 @@ export async function irishTrain(ie, id) {
   if (!rows.length) return { error: 'Irish Rail has no details for this train.' };
   const t = ie.trains.get(id) || {};
   const stops = rows.filter((r) => (r.locationtype || '').toUpperCase() !== 'T').map((r) => {
-    const booked = hm(r.scheduledarrival) || hm(r.scheduleddeparture);
-    const actual = hm(r.arrival) || hm(r.departure);
-    const expected = hm(r.expectedarrival) || hm(r.expecteddeparture);
+    // at the origin there's no arrival, so the departure times are used
+    const origin = (r.locationtype || '').toUpperCase() === 'O';
+    const booked = origin ? hm(r.scheduleddeparture) : hm(r.scheduledarrival) || hm(r.scheduleddeparture);
+    const actual = origin ? hm(r.departure) : hm(r.arrival) || hm(r.departure);
+    const expected = origin ? hm(r.expecteddeparture) : hm(r.expectedarrival) || hm(r.expecteddeparture);
     return { name: cap(r.locationfullname), code: r.locationcode, booked, actual, expected: actual ? null : expected,
       state: actual ? 'passed' : 'due', pass: false, platform: null, late: actual && booked ? lateMins(booked, actual) : null };
   });
@@ -146,7 +150,7 @@ export async function irishTrain(ie, id) {
   const next = stops.find((s) => s.state === 'due') || null;
   const lastPassed = [...stops].reverse().find((s) => s.state === 'passed');
   return {
-    mode: 'live', source: 'irishrail', code, operator: IE_OPERATOR, origin: cap(rows[0].trainorigin), dest: cap(rows[0].traindestination),
+    mode: 'live', source: 'irishrail', natId: id, code, operator: IE_OPERATOR, origin: cap(rows[0].trainorigin), dest: cap(rows[0].traindestination),
     delay: t.delay ?? null, cancelled: false, matched: true, stops, next, passingPoints: passPts,
     last: lastPassed ? { name: lastPassed.name, event: 'Passed', at: null } : null,
     liveNote: 'Live from Iarnród Éireann (times are its estimates; some lines are timetable-only)'
