@@ -249,7 +249,7 @@ const server = http.createServer((req, res) => {
     const want = url.searchParams.get('u') || 'https://apis.opendatani.gov.uk/translink/';
     let target;
     try { target = new URL(want); } catch { return json(400, { error: 'Bad address' }); }
-    if (!['apis.opendatani.gov.uk', 'tiger.worldline.global'].includes(target.hostname)) return json(400, { error: 'Only Translink open data addresses' });
+    if (!['apis.opendatani.gov.uk', 'tiger.worldline.global', 'tiger-api-portal.worldline.global'].includes(target.hostname)) return json(400, { error: 'Only Translink open data addresses' });
     fetch(target, { headers: { 'user-agent': 'MikesTrainTracker/1.0' }, signal: AbortSignal.timeout(15000) })
       .then(async (r) => {
         const text = await r.text();
@@ -260,12 +260,46 @@ const server = http.createServer((req, res) => {
           const re = new RegExp(g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\|/g, '|'), 'gi');
           const hits = [];
           let m;
-          while ((m = re.exec(text)) && hits.length < 80) hits.push(text.slice(Math.max(0, m.index - 120), m.index + 160));
+          while ((m = re.exec(text)) && hits.length < 30) hits.push(text.slice(Math.max(0, m.index - 60), m.index + 90));
           out.hits = hits;
         } else out.body = text.slice(0, 20000);
         json(200, out);
       })
       .catch((e) => json(200, { url: target.href, error: e.message }));
+    return;
+  }
+  if (url.pathname === '/api/ni-probe') {
+    // Find how Worldline's NI Railways site gets its data: the API addresses inside its
+    // app, and what a few likely ones return. Read-only, Worldline's public site only.
+    (async () => {
+      const get = async (u, accept = 'application/json') => {
+        try {
+          const r = await fetch(u, { headers: { accept, origin: 'https://tiger.worldline.global', 'user-agent': 'Mozilla/5.0 MikesTrainTracker' }, signal: AbortSignal.timeout(10000) });
+          const t = await r.text();
+          return { url: u, status: r.status, type: r.headers.get('content-type'), body: t.slice(0, 1500) };
+        } catch (e) { return { url: u, error: e.message }; }
+      };
+      const shell = await get('https://tiger.worldline.global/toc/NIR', 'text/html');
+      const main = /src="(main\.[^"]+\.js)"/.exec(shell.body || '');
+      let strings = [];
+      if (main) {
+        try {
+          const js = await (await fetch('https://tiger.worldline.global/' + main[1], { signal: AbortSignal.timeout(10000) })).text();
+          const found = new Set();
+          for (const m of js.matchAll(/["'`]([^"'`\s]{0,80}(?:tiger-api|\/services|\/toc|\/stations?|\/api\/)[^"'`\s]{0,80})["'`]/g)) found.add(m[1]);
+          strings = [...found].slice(0, 60);
+        } catch (e) { strings = ['error: ' + e.message]; }
+      }
+      const tries = await Promise.all([
+        'https://tiger-api-portal.worldline.global/toc/NIR',
+        'https://tiger-api-portal.worldline.global/tocs/NIR',
+        'https://tiger-api-portal.worldline.global/stations/NIR',
+        'https://tiger-api-portal.worldline.global/toc/NIR/stations',
+        'https://tiger-api-portal.worldline.global/services/BELFASTC',
+        'https://tiger-api-portal.worldline.global/services/LEYTNMR'
+      ].map((u) => get(u)));
+      json(200, { main: main ? main[1] : null, strings, tries });
+    })().catch((e) => json(200, { error: e.message }));
     return;
   }
   if (url.pathname === '/api/ie-debug') return json(200, ieState ? { trains: ieState.trains.size, stations: ieState.stations.size, at: ieState.at ? new Date(ieState.at).toISOString() : null, error: ieState.error, sample: [...ieState.trains.values()].slice(0, 3) } : { note: 'Not running (demo mode)' });
