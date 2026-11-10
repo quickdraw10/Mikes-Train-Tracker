@@ -33,16 +33,18 @@ export function luBoardHTML(b, bound) {
     `<button role="tab" data-act="bound" data-arg="${esc(x)}" aria-selected="${x === pick}">${esc(x)}</button>`).join('')}</div>`;
   const list = b.services.filter((s) => s.bound === pick);
   const soon = list.filter((s) => typeof s.secs === 'number' && s.secs <= 1200).length;
-  const lines = [...new Set(list.map((s) => String(s.toc || '').split(' · ')[0]).filter(Boolean))];
-  const head = `<p class="lu-freq"><b>${soon}</b> train${soon === 1 ? '' : 's'} ${esc(pick.toLowerCase().startsWith('platform') ? 'from ' + pick : pick.toLowerCase())} in the next 20 minutes${lines.length ? ' · ' + esc(lines.join(', ')) : ''}</p>`;
+  const lines = [...new Map(list.filter((s) => s.lineName).map((s) => [s.lineName, s.lineColor])).entries()];
+  const head = `<p class="lu-freq"><b>${soon}</b> train${soon === 1 ? '' : 's'} ${esc(pick.toLowerCase().startsWith('platform') ? 'from ' + pick : pick.toLowerCase())} in the next 20 minutes</p>${lines.length ? `<div class="lu-lines-at">${lines.map(([n, c]) => linePill(n, c)).join('')}</div>` : ''}`;
   return { tabs, body: head + boardHTML({ ...b, services: list }, 'dep'), bound: pick };
 }
 
 // theme 'lu' gives the sheet the London Underground colours
-export function openSheet(html, acts = {}, close = null, theme = null) {
+export function openSheet(html, acts = {}, close = null, theme = null, accent = null) {
   actions = acts;
   onClose = close;
   $card.classList.toggle('lu', theme === 'lu');
+  // a Tube line's own colour for the stripe across the top of the sheet
+  if (accent) $card.style.setProperty('--lu-red', accent); else $card.style.removeProperty('--lu-red');
   $card.innerHTML = `<div class="grab"></div>${html}<button class="close">Close</button>`;
   $sheet.hidden = false;
   $sheet.dataset.kind = 'custom';
@@ -61,6 +63,7 @@ export function closeCustomSheet() {
   $sheet.hidden = true;
   $sheet.dataset.kind = '';
   $card.classList.remove('lu');
+  $card.style.removeProperty('--lu-red');
   const f = onClose; onClose = null; actions = {};
   if (f) f();
 }
@@ -92,6 +95,15 @@ export function toast(text) {
 }
 
 // ---- station board ----
+// Readable text on a line colour (dark text on Circle yellow, H&C pink, etc.)
+export function textOn(hex) {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || '');
+  if (!m) return '#FFFFFF';
+  const [r, g, b] = m.slice(1).map((x) => parseInt(x, 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.32 ? '#0A1240' : '#FFFFFF';
+}
+export const linePill = (name, color) => `<span class="lpill" style="background:${esc(color)};color:${textOn(color)}">${esc(name)}</span>`;
+
 export function boardHTML(b, type) {
   if (!b) return `<div class="empty">Loading…</div>`;
   if (b.error) return `<div class="empty">${esc(b.error)}</div>`;
@@ -101,10 +113,11 @@ export function boardHTML(b, type) {
     const exp = s.cancelled ? 'Canc' : s.expected === 'On time' ? 'On time' : s.expected || '–';
     const info = [
       s.next && !s.cancelled ? `<small class="bnext">${esc(s.nextLabel || 'Next stop')}: ${esc(s.next)}</small>` : '',
+      s.lineColor ? `<small class="lline">${linePill(s.lineName || String(s.toc || '').split(' · ')[0], s.lineColor)}${s.platform ? ' Platform ' + esc(s.platform) : ''}</small>` :
       s.toc || s.passenger === false ? `<small>${opBadge(s.toc, s.tocCode)}${esc([s.passenger === false ? 'Not in passenger service' : null, s.toc].filter(Boolean).join(' · '))}</small>` : '',
       s.length || s.firstClass ? `<small>${esc([s.length ? s.length + ' coaches' : null, s.firstClass].filter(Boolean).join(' · '))}</small>` : '',
     ].join('');
-    return `<button class="brow${s.passenger === false ? ' nonpass' : ''}" data-act="svc" data-arg="${esc(s.id)}" aria-label="${esc((s.headcode ? s.headcode + ' ' : '') + s.place)}, details">
+    return `<button class="brow${s.passenger === false ? ' nonpass' : ''}${s.lineColor ? ' lrow' : ''}"${s.lineColor ? ` style="--lc:${esc(s.lineColor)}"` : ''} data-act="svc" data-arg="${esc(s.id)}" aria-label="${esc((s.headcode ? s.headcode + ' ' : '') + s.place)}, details">
       <span class="btime">${esc(s.booked)}</span>
       <span class="bexp c-${bd}">${esc(s.departed ? 'Dep ' + (s.expected === 'On time' ? s.booked : s.expected) : exp)}</span>
       <span class="bplace"><b>${s.headcode ? `<span class="hcode">${esc(s.headcode)}</span>` : ''}${esc(s.place)}</b>${info}</span>

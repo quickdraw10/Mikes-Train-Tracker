@@ -73,6 +73,12 @@ export async function extraStations() {
 }
 
 // London line status (TfL)
+export async function tflLines() {
+  await ready;
+  if (mode !== 'server') return null;
+  const r = await get('/api/tfl-lines');
+  return r && r.lines && r.lines.length ? r : null;
+}
 export async function tflStatus() {
   await ready;
   if (mode !== 'server') return null;

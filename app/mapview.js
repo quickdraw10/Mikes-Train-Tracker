@@ -7,7 +7,7 @@ import * as api from './api.js';
 import { STATIONS } from './stations.js';
 import { BY_CRS, nearest, searchStations } from './geo.js';
 import { routeFromStops } from './route.js';
-import { opBadge, esc, hhmm, lateText, shortLate, bandOf, openSheet, updateSheet, sheetOpen, closeCustomSheet, loadList, saveList, toast, boardHTML, luBoardHTML } from './ui.js';
+import { opBadge, esc, hhmm, lateText, shortLate, bandOf, openSheet, updateSheet, sheetOpen, closeCustomSheet, loadList, saveList, toast, boardHTML, luBoardHTML, textOn } from './ui.js';
 
 const AREAS_KEY = 'mtt.areas';
 const STATIONS_KEY = 'mtt.stations';
@@ -16,7 +16,7 @@ const CHIP_ZOOM = 11;      // headcode chips from here in
 const STATION_ZOOM = 11;   // station dots from here in
 const LABEL_ZOOM = 13;     // station names from here in
 
-let map, trainLayer, stationLayer, meLayer, pathLayer;
+let map, trainLayer, stationLayer, meLayer, pathLayer, luLineLayer;
 let started = false;
 let refreshTimer, sheetTimer;
 
@@ -38,11 +38,15 @@ function start() {
     maxZoom: 19,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   }).addTo(map);
+  map.createPane('lulines').style.zIndex = 390; // Tube lines sit under the stops and trains
+  luLineLayer = L.layerGroup().addTo(map);
   stationLayer = L.layerGroup().addTo(map);
   pathLayer = L.layerGroup().addTo(map);
   trainLayer = L.layerGroup().addTo(map);
   meLayer = L.layerGroup().addTo(map);
   map.on('moveend', () => { drawStations(); loadTrains(); });
+  map.on('zoomend', drawLuLines);
+  drawLuLines();
   refreshTimer = setInterval(loadTrains, 15000);
   loadTrains();
   wireSearch();
@@ -68,8 +72,23 @@ function setLu(on) {
   if (!map) return;
   // jump to London the first time the Tube view is opened somewhere else
   if (on && !L.latLngBounds([[51.28, -0.6], [51.72, 0.35]]).contains(map.getCenter())) map.setView([51.512, -0.12], 12);
+  drawLuLines();
   drawStations();
   loadTrains();
+}
+
+// The Tube lines drawn in their own colours, from TfL's route data (only in the LU view)
+let luShapes = null;
+async function drawLuLines() {
+  if (!map || !luLineLayer) return;
+  luLineLayer.clearLayers();
+  if (!luMode) return;
+  if (!luShapes) { luShapes = await api.tflLines().catch(() => null); if (!luShapes || !luMode) return; luLineLayer.clearLayers(); }
+  const z = map.getZoom(), w = z >= 15 ? 6 : z >= 13 ? 4.5 : 3;
+  for (const l of luShapes.lines || []) {
+    if (luLines.length && !luLines.includes(l.id)) continue;
+    for (const p of l.paths) L.polyline(p, { pane: 'lulines', color: l.color, weight: w, opacity: luLines.length ? 0.95 : 0.8, interactive: false }).addTo(luLineLayer);
+  }
 }
 // Line filter: pick up to 3 lines to show on their own (none picked = every line)
 const LU_LINES = {
@@ -89,7 +108,7 @@ function drawLinePicker() {
   $lines.hidden = !luMode;
   if (!luMode) return;
   $lines.innerHTML = `<button class="lul all" data-line="" aria-pressed="${!luLines.length}">All</button>` +
-    Object.entries(LU_LINES).map(([id, l]) => `<button class="lul" data-line="${id}" aria-pressed="${luLines.includes(id)}" aria-label="${esc(l.name)}" style="--lc:${l.color}"><i></i>${esc(l.short)}</button>`).join('');
+    Object.entries(LU_LINES).map(([id, l]) => `<button class="lul" data-line="${id}" aria-pressed="${luLines.includes(id)}" aria-label="${esc(l.name)}" style="--lc:${l.color};--lt:${textOn(l.color)}"><i></i>${esc(l.short)}</button>`).join('');
 }
 $lines.addEventListener('click', (e) => {
   const b = e.target.closest('[data-line]');
@@ -102,7 +121,7 @@ $lines.addEventListener('click', (e) => {
   try { localStorage.setItem('mtt.lulines', JSON.stringify(luLines)); } catch { /* not saved */ }
   if (selected && luLines.length && selected.line && !luLines.includes(selected.line)) clearSelection();
   drawLinePicker();
-  if (map) { drawStations(); if (lastRes) drawTrains(lastRes); }
+  if (map) { drawLuLines(); drawStations(); if (lastRes) drawTrains(lastRes); }
 });
 
 luBtn.addEventListener('click', () => { window.dispatchEvent(new CustomEvent('mtt:maptab')); setLu(!luMode); });
@@ -311,7 +330,7 @@ const isLuStation = (crs) => (BY_CRS.get(crs) || {}).country === 'tfl';
 export function boardTrain(row, crs, type, back) {
   return { id: null, code: row.headcode || '', delay: row.delay, cancelled: row.cancelled, toc: row.toc,
     dest: type === 'dep' ? row.place : null, origin: type === 'arr' ? row.place : null,
-    boardRef: { crs, type, id: row.id }, back: back || null };
+    boardRef: { crs, type, id: row.id }, back: back || null, line: row.line || null, color: row.lineColor || null };
 }
 
 // "14:32", "14:37" -> 5, across midnight; null if either is missing
@@ -374,8 +393,12 @@ export async function trainSheet(t) {
     const toggle = passCount ? `<button class="detail-toggle" data-act="detail" aria-pressed="${detailed}">${detailed ? 'Hide' : 'Show'} ${passCount} passing point${passCount === 1 ? '' : 's'}</button>` : '';
     const source = d && d.source === 'darwin' ? '<p class="credit">Stops ahead live from National Rail</p>' : d && d.liveNote ? `<p class="credit">${esc(d.liveNote)}</p>` : '';
     const code = (d && d.code) || t.code || '';
-    return `${t.back ? '<button class="back-link" data-act="back">‹ Back to the board</button>' : ''}<div class="sheet-top"><div class="big b-${bd}">${esc(shortLate(delay, cancelled))}</div>
-      <div><div class="meta">${esc(code)}${op ? ' · ' + opBadge(op, d && d.operatorCode) + esc(op) : ''}</div><h2 id="sheet-title">${title}</h2><p class="c-${bd === 'none' ? 'none' : bd}">${esc(lateText(delay, cancelled))}</p></div></div>
+    // Tube trains: the line's colour and code in place of minutes late (the Tube has no per-train timetable)
+    const ln = isLu(t) && LU_LINES[t.line] ? LU_LINES[t.line] : null;
+    const bigBox = ln ? `<div class="big lu-big" style="background:${ln.color};color:${textOn(ln.color)}">${esc(ln.short)}</div>` : `<div class="big b-${bd}">${esc(shortLate(delay, cancelled))}</div>`;
+    const sub = ln ? `<p class="c-none">${esc(ln.name)}${/DLR|Trams/.test(ln.name) ? '' : ' line'} · live predictions</p>` : `<p class="c-${bd === 'none' ? 'none' : bd}">${esc(lateText(delay, cancelled))}</p>`;
+    return `${t.back ? '<button class="back-link" data-act="back">‹ Back to the board</button>' : ''}<div class="sheet-top">${bigBox}
+      <div><div class="meta">${esc(code)}${op ? ' · ' + opBadge(op, d && d.operatorCode) + esc(op) : ''}</div><h2 id="sheet-title">${title}</h2>${sub}</div></div>
       ${next}
       ${last ? `<p class="lastseen">${esc(last.event || 'Seen')} ${esc(last.name)}${last.at ? ' at ' + hhmm(last.at) : ''}</p>` : ''}
       ${extras.map((x) => `<p class="lastseen">${x}</p>`).join('')}
@@ -400,7 +423,7 @@ export async function trainSheet(t) {
       const r = routeFromStops(d && d.stops, origin && dest ? `${origin} – ${dest}` : null);
       if (r) { closeCustomSheet(); window.dispatchEvent(new CustomEvent('mtt:route', { detail: { route: r, train: t.code } })); }
     }
-  }, () => clearInterval(sheetTimer), isLu(t) ? 'lu' : null);
+  }, () => clearInterval(sheetTimer), isLu(t) ? 'lu' : null, isLu(t) && LU_LINES[t.line] ? LU_LINES[t.line].color : null);
   load();
   sheetTimer = setInterval(load, 30000);
 }
@@ -430,8 +453,11 @@ function drawStations() {
       // Underground: small white stops; names only for a few landmark stations until zoomed right in.
       // Every stop can still be tapped for its name and board.
       const short = luShort(name);
-      m = L.circleMarker([lat, lon], { radius: z >= 15 ? 5 : 4, color: '#FFFFFF', weight: 2, fillColor: '#0019A8', fillOpacity: 1 });
+      // a stop on one line is ringed in that line's colour; an interchange is white with a dark ring
       const st = BY_CRS.get(crs) || {};
+      const own = (st.lines || []).filter((l) => !luLines.length || luLines.includes(l));
+      const ring = own.length === 1 && LU_LINES[own[0]] ? LU_LINES[own[0]].color : '#0A1240';
+      m = L.circleMarker([lat, lon], { radius: z >= 15 ? 5 : 4, color: ring, weight: own.length > 1 ? 2.5 : 3, fillColor: '#FFFFFF', fillOpacity: 1 });
       // with lines chosen there are far fewer stops, so they're all named from zoom 13
       const show = z >= 16 || (luLines.length && z >= 13) || (z >= 15 && (st.nLines || 1) >= 2) || (z >= 12 && LU_KEY.has(short.toLowerCase()));
       if (show && !labelled.has(short)) { labelled.add(short); m.bindTooltip(short, { permanent: true, direction: 'right', offset: [7, 0], className: 'stn-label lu-label' }); }

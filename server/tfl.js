@@ -39,21 +39,23 @@ const KEY_WAYS = [
   (url, key) => [url, { app_key: key }],
   (url, key) => [url, { 'Ocp-Apim-Subscription-Key': key }]
 ];
-let keyWay = null;
-export const trackernetAuth = () => (keyWay == null ? 'not yet' : ['query app_key', 'app_key header', 'subscription header'][keyWay]);
+let keyWay = null, prefix = null;
+// TfL's portal lists the address as /trackernet/…; older guides say /TrackerNet/…
+const PREFIXES = ['/trackernet', '/TrackerNet'];
+export const trackernetAuth = () => (keyWay == null ? 'not yet' : `${['query app_key', 'app_key header', 'subscription header'][keyWay]} via ${prefix}`);
 async function getText(path) {
   const key = process.env.TFL_KEY;
   const base = { 'user-agent': 'MikesTrainTracker/1.0' };
-  const order = !key ? [] : keyWay != null ? [keyWay] : [0, 1, 2];
+  const tries = [];
+  if (key) for (const pre of prefix ? [prefix] : PREFIXES) for (const i of keyWay != null ? [keyWay] : [0, 1, 2]) tries.push([pre, i]);
   let last = 0;
-  for (const i of order) {
-    const [url, h] = KEY_WAYS[i](`${BASE}${path}`, key);
+  for (const [pre, i] of tries) {
+    const [url, h] = KEY_WAYS[i](`${BASE}${pre}${path}`, key);
     const res = await fetch(url, { headers: { ...base, ...h }, signal: AbortSignal.timeout(15000) });
-    if (res.ok) { keyWay = i; return res.text(); }
+    if (res.ok) { keyWay = i; prefix = pre; return res.text(); }
     last = res.status;
-    if (res.status !== 401 && res.status !== 403) break;
   }
-  if (!key) { const res = await fetch(`${BASE}${path}`, { headers: base, signal: AbortSignal.timeout(15000) }); if (res.ok) return res.text(); last = res.status; }
+  if (!key) { const res = await fetch(`${BASE}${PREFIXES[0]}${path}`, { headers: base, signal: AbortSignal.timeout(15000) }); if (res.ok) return res.text(); last = res.status; }
   throw new Error(`TfL returned ${last}`);
 }
 
@@ -149,7 +151,7 @@ export async function pollTfl(tfl, now = Date.now()) {
     for (const [id, code] of Object.entries(TRACKERNET)) {
       if (id === 'hammersmith-city' && viaTrackernet.has('circle')) continue;
       let rows;
-      try { rows = parseSummary(await getText(`/TrackerNet/PredictionSummary/${code}`)); } catch (e) { tfl.error = `Trackernet ${code}: ${e.message}`; continue; }
+      try { rows = parseSummary(await getText(`/PredictionSummary/${code}`)); } catch (e) { tfl.error = `Trackernet ${code}: ${e.message}`; continue; }
       if (!rows.length) continue;
       viaTrackernet.add(id);
       if (code === 'H') viaTrackernet.add('circle');
@@ -229,13 +231,35 @@ export async function tflBoard(tfl, code) {
     return { id: v && !/^0+$/.test(v) ? `tfl:${p.lineId}:${v}` : `tflp:${p.id}`, headcode: null, booked: clock(p.expectedArrival), expected: due(p.timeToStation),
       delay: null, cancelled: false, place: tidy(p.destinationName) || p.towards || 'Check front of train', platform: (/(\d+)\s*$/.exec(p.platformName || '') || [])[1] || null,
       toc: `${line.name}${p.platformName ? ' · ' + p.platformName : ''}`, tocCode: null, next: p.currentLocation || null, nextLabel: 'Now', reason: null, length: null,
-      bound: boundOf(p), line: p.lineId, secs: p.timeToStation };
+      bound: boundOf(p), line: p.lineId, lineColor: line.color || null, lineName: line.name, secs: p.timeToStation };
   });
   // the directions at this station, in a fixed order (N, S, E, W, then anything else TfL names)
   const bounds = [...new Set(services.map((s) => s.bound))].sort((a, b) => boundRank(a) - boundRank(b) || a.localeCompare(b));
   const crowd = st && st.lines.some((l) => TRACKERNET[l]) ? await tflCrowding(code) : null;
   return { mode: 'live', source: 'tfl', crs: code, name: st ? st.name : tidy(preds[0] && preds[0].stationName) || code, services, bounds, messages: crowd ? [crowd] : [], predictions: true,
     credit: 'Powered by TfL Open Data' };
+}
+
+// The lines themselves, for drawing on the map: TfL's route geometry for each line
+// (Line/{id}/Route/Sequence/all gives the track as lists of points). Loaded once at start.
+export async function loadTflShapes(tfl) {
+  tfl.shapes = tfl.shapes || {};
+  for (const [id, line] of Object.entries(TFL_LINES)) {
+    try {
+      const seq = await get(`/Line/${id}/Route/Sequence/all`);
+      const paths = [];
+      const seen = new Set();
+      for (const ls of seq.lineStrings || []) {
+        for (const part of JSON.parse(ls)) {
+          const pts = part.map(([lon, lat]) => [Math.round(lat * 1e5) / 1e5, Math.round(lon * 1e5) / 1e5]);
+          const k = pts.length + ':' + pts[0] + ':' + pts[pts.length - 1];
+          if (pts.length > 1 && !seen.has(k)) { seen.add(k); paths.push(pts); }
+        }
+      }
+      tfl.shapes[id] = { id, name: line.name, color: line.color, paths };
+    } catch (e) { tfl.error = `${line.name} route: ${e.message}`; }
+  }
+  return Object.keys(tfl.shapes).length;
 }
 
 // Which way a train is heading at this station, as TfL names the platform ("Northbound - Platform 1").

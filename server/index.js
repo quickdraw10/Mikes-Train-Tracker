@@ -26,7 +26,7 @@ import { createTimetable, loadTimetable } from './timetable.js';
 import { downloadSmart, buildStationPanel, smartDebug } from './panelbuild.js';
 import { createDecoder } from './decode.js';
 import { getBoard, serviceDetail } from './ldb.js';
-import { createTfl, loadTflStations, pollTfl, pollTflStatus, tflTrainsIn, tflBoard, tflTrain, trackernetAuth } from './tfl.js';
+import { createTfl, loadTflStations, pollTfl, pollTflStatus, tflTrainsIn, tflBoard, tflTrain, trackernetAuth, loadTflShapes } from './tfl.js';
 import { createIrish, loadStations as loadIrishStations, pollTrains as pollIrish, irishTrainsIn, irishBoard, irishTrain } from './ie.js';
 import { BY_CRS } from '../app/geo.js';
 import { createNationalSim } from '../app/national-sim.js';
@@ -187,6 +187,8 @@ if (live) {
   // ---- London: TfL (Tube, DLR, Trams) ----
   const tfl = createTfl();
   tflState = tfl;
+  const tflShapes = () => loadTflShapes(tfl).then((n) => console.log(`[tfl] ${n} line shapes`)).catch(() => setTimeout(tflShapes, 10 * 60000));
+  tflShapes();
   const tflStations = () => loadTflStations(tfl).then((n) => console.log(`[tfl] ${n} stations`)).catch((e) => { tfl.error = e.message; setTimeout(tflStations, 10 * 60000); });
   tflStations().then(() => pollTfl(tfl)).catch(() => {});
   setInterval(tflStations, 24 * 3600000);
@@ -327,8 +329,9 @@ const server = http.createServer((req, res) => {
     })().catch((e) => json(200, { error: e.message }));
     return;
   }
+  if (url.pathname === '/api/tfl-lines') return json(200, { lines: tflState && tflState.shapes ? Object.values(tflState.shapes) : [] });
   if (url.pathname === '/api/tfl-status') return json(200, { lines: tflState ? tflState.status : [] });
-  if (url.pathname === '/api/tfl-debug') return json(200, tflState ? { stations: tflState.stations.size, lines: tflState.byLine.size, trains: tflState.trains.size, viaTrackernet: [...tflState.trains.values()].filter((t) => t.source === 'trackernet').length, at: tflState.at ? new Date(tflState.at).toISOString() : null, key: Boolean(process.env.TFL_KEY), trackernetAuth: trackernetAuth(), error: tflState.error, status: tflState.status.slice(0, 4), sample: [...tflState.trains.values()].slice(0, 4).map(({ stops, ...t }) => ({ ...t, stops: stops ? stops.length : null })) } : { note: 'Not running (demo mode)' });
+  if (url.pathname === '/api/tfl-debug') return json(200, tflState ? { stations: tflState.stations.size, lines: tflState.byLine.size, trains: tflState.trains.size, viaTrackernet: [...tflState.trains.values()].filter((t) => t.source === 'trackernet').length, at: tflState.at ? new Date(tflState.at).toISOString() : null, key: Boolean(process.env.TFL_KEY), trackernetAuth: trackernetAuth(), shapes: Object.keys(tflState.shapes || {}).length, error: tflState.error, status: tflState.status.slice(0, 4), sample: [...tflState.trains.values()].slice(0, 4).map(({ stops, ...t }) => ({ ...t, stops: stops ? stops.length : null })) } : { note: 'Not running (demo mode)' });
   if (url.pathname === '/api/ie-debug') return json(200, ieState ? { trains: ieState.trains.size, stations: ieState.stations.size, at: ieState.at ? new Date(ieState.at).toISOString() : null, error: ieState.error, sample: [...ieState.trains.values()].slice(0, 3) } : { note: 'Not running (demo mode)' });
   const tm = /^\/api\/train\/([A-Za-z0-9:% -]{4,48})$/.exec(decodeURIComponent(url.pathname));
   if (tm) {
