@@ -27,24 +27,9 @@ export const CREWE = {
   id: 'cre', name: 'Crewe', subtitle: 'Cheshire', crs: 'CRE',
   ends: ['STAFFORD · STOKE', 'WARRINGTON · CHESTER']
 };
-// Hull Paragon is a terminus: every train comes in from the west (Brough / Selby line and the
-// Beverley line, which join outside the station), so the London side is the only way out.
-export const HULL = {
-  id: 'hul', name: 'Hull Paragon', subtitle: 'East Yorkshire', crs: 'HUL', stanme: 'HULL',
-  ends: ['BROUGH · BEVERLEY', 'BUFFER STOPS']
-};
-// Doncaster: the London end is the south (Retford, Sheffield, Lincoln); north to York, Leeds and Hull
-export const DONCASTER = {
-  id: 'don', name: 'Doncaster', subtitle: 'South Yorkshire', crs: 'DON',
-  ends: ['RETFORD · SHEFFIELD · LINCOLN', 'YORK · LEEDS · HULL']
-};
-// Leeds: London trains come in at the west end (via Wakefield), with Bradford and Huddersfield;
-// the east end goes to York, Selby and Hull
-export const LEEDS = {
-  id: 'lds', name: 'Leeds', subtitle: 'West Yorkshire', crs: 'LDS',
-  ends: ['WAKEFIELD · BRADFORD · HUDDERSFIELD', 'YORK · SELBY · HULL']
-};
-export const STATION_PANELS = [YORK, LEEDS, DONCASTER, HULL, CLAPHAM, CREWE];
+// Hull Paragon was tried, but Network Rail's SMART berth data has no Hull rows at all (its signal
+// box isn't in the train describer data), so there's no real layout to draw. Not added.
+export const STATION_PANELS = [YORK, LEEDS, DONCASTER, CLAPHAM, CREWE];
 
 function demoRoad(name, n, dir, cols) {
   const base = 1000 + n * 10;
