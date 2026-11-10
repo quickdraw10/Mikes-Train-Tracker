@@ -233,6 +233,24 @@ const TH = Math.round(TW * (BOUNDS.n - BOUNDS.s) / ((BOUNDS.e - BOUNDS.w) * K));
 const txy = (lat, lon) => [((lon - BOUNDS.w) * K / ((BOUNDS.e - BOUNDS.w) * K)) * TW, ((BOUNDS.n - lat) / (BOUNDS.n - BOUNDS.s)) * TH];
 const statusOf = (id) => (tube.status && tube.status.lines ? tube.status.lines.find((l) => l.id === id) : null);
 
+// Station initials for the Tube map: King's Cross St. Pancras → KXStP, Covent Garden → CG,
+// Elephant & Castle → E&C, Harrow-on-the-Hill → HotH. One-word names use their first three
+// letters (Bank → Ban) so they're still recognisable. The full name shows when you tap.
+const SMALL = new Set(['on', 'the', 'of', 'upon', 'le', 'in', 'at', 'and']);
+export function initials(name) {
+  const words = String(name || '').replace(/\(.*?\)/g, ' ').replace(/[''.]/g, '').split(/[\s-]+/).filter(Boolean);
+  if (words.length === 1) return words[0].slice(0, 3);
+  return words.map((w, i) => {
+    const lw = w.toLowerCase();
+    if (w === '&') return '&';
+    if (/^\d/.test(w)) return w;
+    if (lw === 'cross') return 'X';
+    if ((lw === 'st' || lw === 'saint') && i < words.length - 1) return 'St';
+    if (SMALL.has(lw) && i > 0) return lw[0];
+    return w[0].toUpperCase();
+  }).join('');
+}
+
 function tubeSVG() {
   let under = '', lines = '', dots = '', labels = '', trains = '';
   const f = tube.focus;
@@ -258,7 +276,7 @@ function tubeSVG() {
     named.add(short);
     // landmark names always; interchanges from 2x zoom; every station from 4x (or all, for a picked line, from 2x)
     const lvl = LU_KEY.has(short.toLowerCase()) ? 'k' : inter ? 'i' : 'm';
-    labels += `<text x="${(x + 4).toFixed(1)}" y="${(y - 3).toFixed(1)}" class="tm-lbl l-${lvl}" data-crs="${esc(code)}">${esc(short)}</text>`;
+    labels += `<text x="${(x + 4).toFixed(1)}" y="${(y - 3).toFixed(1)}" class="tm-lbl l-${lvl}" data-crs="${esc(code)}"><title>${esc(short)}</title>${esc(initials(short))}</text>`;
   }
   for (const t of tube.trains) {
     if (f && t.line !== f) continue;
