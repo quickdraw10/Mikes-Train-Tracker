@@ -7,11 +7,11 @@ import { buildView, band } from './model.js';
 import { createSim } from './sim.js';
 import * as api from './api.js';
 import { closeCustomSheet, openSheet as openCustom, toast, bandOf, opBadge } from './ui.js';
-import { showMap, trainSheet, stationSheet, focusTrain } from './mapview.js';
+import { showMap, trainSheet, stationSheet, focusTrain, isLuMode } from './mapview.js';
 import * as route from './route.js';
 import { BY_CRS, searchStations, addStations } from './geo.js';
 import { showBoards } from './boards.js';
-import { showNetwork } from './network.js';
+import { showNetwork, showNetworkPage } from './network.js';
 
 const $view = document.getElementById('view');
 const $sheet = document.getElementById('sheet');
@@ -382,7 +382,7 @@ function routeBuilder(startCrs) {
 }
 
 window.addEventListener('mtt:route', (e) => { useRoute(e.detail.route); toast(e.detail.quiet ? `${e.detail.route.name} is now on the Route tab` : `Route set from ${e.detail.train}'s stops`); });
-window.addEventListener('mtt:maptab', () => { if (ui.tab !== 'map') switchTab('map'); });
+window.addEventListener('mtt:tubemap', () => showNetworkPage('tube'));
 window.addEventListener('mtt:showtrain', (e) => { switchTab('map'); focusTrain(e.detail.train); });
 window.addEventListener('mtt:build', (e) => { switchTab('route'); routeBuilder(e.detail.crs); });
 
@@ -458,8 +458,21 @@ let lastShape = '';
 window.addEventListener('resize', () => {
   if (ui.tab !== 'panel') return;
   const shape = window.innerWidth > window.innerHeight ? 'l' : 'p';
-  if (shape !== lastShape) { lastShape = shape; render(); } else fitPanel();
+  if (shape !== lastShape) { lastShape = shape; render(); centrePanel(); } else fitPanel();
 });
+// After turning the phone, bring the panel to the middle of the screen (iPhone settles its size
+// a moment after the turn, so this runs twice)
+function centrePanel() {
+  const go = () => {
+    if (ui.tab !== 'panel') return;
+    const wrap = $view.querySelector('.landbox .iecc-wrap') || $view.querySelector('.landbox');
+    if (!wrap) return;
+    const r = wrap.getBoundingClientRect();
+    window.scrollTo({ top: Math.max(0, window.scrollY + r.top + r.height / 2 - window.innerHeight / 2), behavior: 'auto' });
+  };
+  setTimeout(go, 120);
+  setTimeout(go, 450);
+}
 
 // Irish (and later other countries') stations, once the live service is connected
 api.extraStations().then(addStations).catch(() => {});
@@ -481,8 +494,11 @@ function render() {
     $view.innerHTML = `<header class="head"><h1>Train Tracker</h1><div class="sub">${msg}</div></header>`;
     return;
   }
+  // keep your place on the page when live updates redraw it (otherwise the page jumps to the top)
+  const keepY = window.scrollY;
   $view.innerHTML = ui.tab === 'panel' ? renderPanel() : renderRoute();
   if (ui.tab === 'panel') fitPanel();
+  if (keepY) window.scrollTo(0, keepY);
   if (ui.selected) renderSheet();
 }
 
@@ -493,10 +509,14 @@ function switchTab(tab) {
   document.querySelectorAll('.tab').forEach((t) => { if (t.dataset.tab === tab) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current'); });
   window.scrollTo(0, 0);
   render();
+  if (tab === 'panel' && window.innerWidth > window.innerHeight) centrePanel();
   if (tab === 'map') showMap();
   if (tab === 'boards') showBoards();
   if (tab === 'route') startRoute();
-  if (tab === 'network') showNetwork(document.getElementById('netview'), { train: trainSheet, station: (crs) => stationSheet(crs) });
+  if (tab === 'network') {
+    showNetwork(document.getElementById('netview'), { train: trainSheet, station: (crs) => stationSheet(crs) });
+    if (isLuMode()) requestAnimationFrame(() => showNetworkPage('tube', false)); // coming from the Underground map: open at the Tube map
+  }
 }
 
 document.getElementById('info-btn').addEventListener('click', () => switchTab('info'));

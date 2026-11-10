@@ -92,7 +92,7 @@ async function drawLuLines() {
   }
 }
 // Line filter: pick up to 3 lines to show on their own (none picked = every line)
-const LU_LINES = {
+export const LU_LINES = {
   bakerloo: { short: 'BAK', name: 'Bakerloo', color: '#B36305' }, central: { short: 'CEN', name: 'Central', color: '#E32017' },
   circle: { short: 'CIR', name: 'Circle', color: '#FFD300' }, district: { short: 'DIS', name: 'District', color: '#00782A' },
   'hammersmith-city': { short: 'H&C', name: 'Hammersmith & City', color: '#F3A9BB' }, jubilee: { short: 'JUB', name: 'Jubilee', color: '#A0A5A9' },
@@ -151,7 +151,13 @@ $lines.addEventListener('click', (e) => {
   if (map) { drawLuLines(); drawStations(); if (lastRes) drawTrains(lastRes); }
 });
 
-luBtn.addEventListener('click', () => { window.dispatchEvent(new CustomEvent('mtt:maptab')); setLu(!luMode); });
+// The LU button works on the Map (switches to the Underground map) and on Network (jumps to the Tube map page)
+luBtn.addEventListener('click', () => {
+  const tab = document.body.dataset.tab;
+  if (tab === 'network') { window.dispatchEvent(new CustomEvent('mtt:tubemap')); return; }
+  if (tab === 'map') setLu(!luMode);
+});
+export const isLuMode = () => luMode;
 luBtn.setAttribute('aria-pressed', String(luMode));
 document.body.classList.toggle('lu-mode', luMode);
 drawLinePicker();
@@ -458,10 +464,10 @@ export async function trainSheet(t) {
 // ---------- stations ----------
 // Landmark stations named on the Underground map when zoomed out: big interchanges and termini,
 // spread across zones 1–2 so you can find your way. Everything else is named when you zoom in.
-const LU_KEY = new Set(["king's cross st. pancras", 'euston', 'paddington', 'baker street', 'oxford circus', 'bank', 'liverpool street',
+export const LU_KEY = new Set(["king's cross st. pancras", 'euston', 'paddington', 'baker street', 'oxford circus', 'bank', 'liverpool street',
   'waterloo', 'victoria', 'london bridge', 'westminster', 'stratford', 'canary wharf', 'tottenham court road', 'earl\'s court',
   'notting hill gate', 'camden town', 'elephant & castle', 'brixton', 'finsbury park', 'wimbledon', 'hammersmith', 'tower hill', 'green park']);
-const luShort = (n) => String(n || '').replace(/\s*\((Underground|DLR|Tram)\)$/, '');
+export const luShort = (n) => String(n || '').replace(/\s*\((Underground|DLR|Tram)\)$/, '');
 
 function drawStations() {
   stationLayer.clearLayers();

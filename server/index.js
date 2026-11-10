@@ -261,6 +261,28 @@ const server = http.createServer((req, res) => {
     const max = Math.max(1, Math.min(2500, num('max') || 600));
     return json(200, national.trains(box, max, url.searchParams.get('only') || undefined));
   }
+  if (url.pathname === '/api/delays') {
+    // Average delay by operator, across every Great Britain train running now with a live report.
+    // Early trains count as 0 late; trains with no live delay figure are counted but not averaged.
+    const res = national.trains({ w: -8.7, s: 49.8, e: 2.0, n: 61.0 }, 100000);
+    const by = new Map();
+    for (const t of res.trains || []) {
+      if (t.country === 'ie' || t.country === 'tfl' || !t.toc) continue;
+      const o = by.get(t.toc) || by.set(t.toc, { name: t.toc, code: t.tocCode || null, trains: 0, timed: 0, sum: 0, onTime: 0, late5: 0, late15: 0, cancelled: 0 }).get(t.toc);
+      o.trains++;
+      if (t.cancelled) { o.cancelled++; continue; }
+      if (typeof t.delay !== 'number') continue;
+      const d = Math.max(0, t.delay);
+      o.timed++; o.sum += d;
+      if (d <= 1) o.onTime++;
+      if (d >= 5) o.late5++;
+      if (d >= 15) o.late15++;
+    }
+    const operators = [...by.values()].map(({ sum, ...o }) => ({ ...o, avg: o.timed ? Math.round((sum / o.timed) * 10) / 10 : null }))
+      .sort((a, b) => (b.avg ?? -1) - (a.avg ?? -1) || b.trains - a.trains);
+    const all = operators.reduce((m, o) => ({ trains: m.trains + o.trains, timed: m.timed + o.timed, sum: m.sum + (o.avg || 0) * o.timed, late5: m.late5 + o.late5, cancelled: m.cancelled + o.cancelled }), { trains: 0, timed: 0, sum: 0, late5: 0, cancelled: 0 });
+    return json(200, { mode: res.mode, at: new Date().toISOString(), overall: { trains: all.trains, timed: all.timed, avg: all.timed ? Math.round((all.sum / all.timed) * 10) / 10 : null, late5: all.late5, cancelled: all.cancelled }, operators });
+  }
   if (url.pathname === '/api/moves') {
     const lat = num('lat'), lon = num('lon'), r = Math.min(50, num('km') || 15);
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return json(400, { error: 'Need lat and lon' });

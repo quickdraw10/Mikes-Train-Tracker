@@ -11,7 +11,8 @@ import { BY_CRS } from './geo.js';
 import { band } from './model.js';
 import { place } from './route.js';
 import { esc, shortLate, bandOf, openSheet, opBadge } from './ui.js';
-import { statusSheet } from './tflstatus.js';
+import { statusSheet, statusListHTML } from './tflstatus.js';
+import { LU_KEY, luShort } from './mapview.js';
 
 const line = (id, name, codes) => ({ id, name, crs: codes.split(' ') });
 export const LINES = [
@@ -148,21 +149,6 @@ function worstList() {
 }
 
 let el = null, timer = null, onTrain = null, onStation = null;
-function render() {
-  if (!el) return;
-  const all = state.segs ? Object.values(state.segs) : [];
-  const total = new Set(all.flatMap((s) => s.trains.map((t) => t.id))).size;
-  const late = new Set(all.flatMap((s) => s.trains.filter((t) => t.cancelled || t.delay >= 2).map((t) => t.id))).size;
-  const pill = state.error ? '<span class="pill wait c-bad">Offline</span>' : state.mode ? `<span class="pill ${state.mode === 'live' ? 'live' : 'demo'}">${state.mode === 'live' ? 'Live' : 'Demo'}</span>` : '<span class="pill wait">Loading</span>';
-  el.innerHTML = `<header class="head"><h1>Network</h1><div class="sub">Main lines, lit by how late trains are running</div>
-      <div class="sub">${pill}<span>${state.error ? esc(state.error) : state.segs ? `${total} trains on these lines · <span class="c-mid">${late} late</span>` : 'Finding trains…'}</span></div></header>
-    <div class="iecc-wrap">${svg()}</div>
-    <p class="note">Each stretch shows the average delay of the trains on it. Tap a stretch for its trains, or a station for its board.</p>
-    <div class="legend"><span><i class="b-ok"></i>On time</span><span><i class="b-mid"></i>2–9 late</span><span><i class="b-bad"></i>10+ late</span><span><i class="b-none"></i>No trains</span></div>
-    ${worstList()}
-    ${londonLines()}`;
-}
-
 // TfL line status: Good service, Minor delays, Part closure... with TfL's explanation
 const sevBand = (sev) => (sev === 10 ? 'ok' : sev === 9 || sev === 19 ? 'mid' : 'bad');
 function londonLines() {
@@ -193,19 +179,196 @@ function segSheet(key) {
   });
 }
 
+// ---- the Network tab: pages you swipe between ----
+// Rail network → Tube map → Tube status → Delays. Swipe sideways, or tap the names along the top.
+const PAGES = [['rail', 'Rail'], ['tube', 'Tube map'], ['status', 'Tube status'], ['delays', 'Delays']];
+let page = 'rail';
+const $p = (name) => el && el.querySelector(`.np-page[data-p="${name}"]`);
+
+function railHTML() {
+  const all = state.segs ? Object.values(state.segs) : [];
+  const total = new Set(all.flatMap((s) => s.trains.map((t) => t.id))).size;
+  const late = new Set(all.flatMap((s) => s.trains.filter((t) => t.cancelled || t.delay >= 2).map((t) => t.id))).size;
+  const pill = state.error ? '<span class="pill wait c-bad">Offline</span>' : state.mode ? `<span class="pill ${state.mode === 'live' ? 'live' : 'demo'}">${state.mode === 'live' ? 'Live' : 'Demo'}</span>` : '<span class="pill wait">Loading</span>';
+  return `<header class="head"><h1>Network</h1><div class="sub">Main lines, lit by how late trains are running</div>
+      <div class="sub">${pill}<span>${state.error ? esc(state.error) : state.segs ? `${total} trains on these lines · <span class="c-mid">${late} late</span>` : 'Finding trains…'}</span></div></header>
+    <div class="iecc-wrap">${svg()}</div>
+    <p class="note">Each stretch shows the average delay of the trains on it. Tap a stretch for its trains, or a station for its board.</p>
+    <div class="legend"><span><i class="b-ok"></i>On time</span><span><i class="b-mid"></i>2–9 late</span><span><i class="b-bad"></i>10+ late</span><span><i class="b-none"></i>No trains</span></div>
+    ${worstList()}
+    ${londonLines()}`;
+}
+
+function render() {
+  if (!el) return;
+  const r = $p('rail'); if (r) r.innerHTML = railHTML();
+  renderStatus();
+  renderDelays();
+}
+
+// ---- Tube map: TfL's own route data for each line, drawn to scale, with live trains ----
+const AREAS = { central: { w: -0.29, e: 0.06, s: 51.455, n: 51.565, name: 'Central London' }, all: { w: -0.62, e: 0.30, s: 51.33, n: 51.71, name: 'Whole network' } };
+let tube = { area: 'central', shapes: null, trains: [], at: 0, timer: null };
+function tubeXY(a, W, H) {
+  const k = Math.cos(51.5 * Math.PI / 180);
+  const sx = W / ((a.e - a.w) * k), sy = H / (a.n - a.s), sc = Math.min(sx, sy);
+  const ox = (W - (a.e - a.w) * k * sc) / 2, oy = (H - (a.n - a.s) * sc) / 2;
+  return (lat, lon) => [ox + (lon - a.w) * k * sc, oy + (a.n - lat) * sc];
+}
+function tubeSVG() {
+  const a = AREAS[tube.area];
+  const W = 800, H = Math.round(800 * ((a.n - a.s) / ((a.e - a.w) * Math.cos(51.5 * Math.PI / 180))));
+  const xy = tubeXY(a, W, H);
+  const inA = (lat, lon) => lat > a.s - 0.02 && lat < a.n + 0.02 && lon > a.w - 0.03 && lon < a.e + 0.03;
+  let g = '';
+  const wLine = tube.area === 'central' ? 4 : 2.6;
+  for (const l of (tube.shapes && tube.shapes.lines) || []) {
+    for (const path of l.paths) {
+      if (!path.some(([la, lo]) => inA(la, lo))) continue;
+      g += `<polyline points="${path.map(([la, lo]) => xy(la, lo).map((v) => v.toFixed(1)).join(',')).join(' ')}" fill="none" stroke="${l.color}" stroke-width="${wLine}" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>`;
+    }
+  }
+  const named = new Set();
+  for (const [code, st] of BY_CRS) {
+    if (st.country !== 'tfl' || !inA(st.lat, st.lon)) continue;
+    const [x, y] = xy(st.lat, st.lon);
+    const short = luShort(st.name);
+    const inter = (st.lines || []).length > 1;
+    g += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${tube.area === 'central' ? (inter ? 4.2 : 3) : (inter ? 3 : 2)}" class="tm-stn${inter ? ' inter' : ''}" data-crs="${esc(code)}"><title>${esc(short)}</title></circle>`;
+    if (LU_KEY.has(short.toLowerCase()) && !named.has(short) && (tube.area === 'central' || inter)) {
+      named.add(short);
+      g += `<text x="${(x + 6).toFixed(1)}" y="${(y - 5).toFixed(1)}" class="tm-lbl" data-crs="${esc(code)}">${esc(short)}</text>`;
+    }
+  }
+  for (const t of tube.trains) {
+    if (!inA(t.lat, t.lon)) continue;
+    const [x, y] = xy(t.lat, t.lon);
+    g += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${tube.area === 'central' ? 5.5 : 4}" fill="${esc(t.color || '#FFFFFF')}" class="tm-train" data-train="${esc(t.id)}"><title>${esc((t.toc || '') + (t.dest ? ' to ' + t.dest : ''))}</title></circle>`;
+  }
+  return `<svg class="tm" viewBox="0 0 ${W} ${H}" role="img" aria-label="Map of London's Underground, DLR and tram lines with live trains">${g}</svg>`;
+}
+function renderTube() {
+  const pg = $p('tube');
+  if (!pg) return;
+  const a = AREAS[tube.area];
+  pg.innerHTML = `<header class="head"><h1>Tube map</h1><div class="sub">Lines drawn to scale from TfL's route data, with live trains</div>
+      <div class="sub">${tube.at ? '<span class="pill live">Live</span>' : '<span class="pill wait">Loading</span>'}<span>${tube.trains.length} trains · ${esc(a.name)}</span></div></header>
+    <div class="segctl pad tm-area" role="tablist">${Object.entries(AREAS).map(([k, v]) => `<button role="tab" data-tarea="${k}" aria-selected="${tube.area === k}">${esc(v.name)}</button>`).join('')}</div>
+    <div class="tm-wrap">${tube.shapes ? tubeSVG() : '<div class="empty">Loading the lines…</div>'}</div>
+    <p class="note">Turn your phone sideways for a bigger map. Tap a station for its board, or a train for its next stops.</p>
+    <p class="credit">Powered by TfL Open Data</p>`;
+}
+async function loadTube() {
+  if (!tube.shapes) tube.shapes = await api.tflLines().catch(() => null);
+  const a = AREAS.all;
+  const r = await api.trains({ w: a.w, s: a.s, e: a.e, n: a.n }, 2500, 'tfl').catch(() => null);
+  if (r && r.trains) { tube.trains = r.trains; tube.at = Date.now(); }
+  renderTube();
+}
+
+// ---- Tube status: the same list as the status popup, as a page ----
+let stData = null;
+const stOpen = new Set();
+function renderStatus() {
+  const pg = $p('status');
+  if (!pg) return;
+  const v = statusListHTML(stData, stOpen);
+  pg.innerHTML = `<header class="head"><h1>Tube status</h1><div class="sub">Live from TfL · every London line</div></header><div class="pad">${v.sum}${v.body}</div>`;
+}
+
+// ---- Delays: average delay by main line and by train company, right now ----
+let dlData = null;
+function bars(rows) {
+  const max = Math.max(5, ...rows.map((r) => r.avg || 0));
+  return rows.map((r) => {
+    const bd = r.avg == null ? 'none' : band({ delay: Math.round(r.avg) });
+    return `<div class="dl-row"><div class="dl-name">${r.badge || ''}${esc(r.name)}<small>${esc(r.sub)}</small></div>
+      <div class="dl-bar"><i class="b-${bd}" style="width:${r.avg == null ? 0 : Math.max(3, (r.avg / max) * 100).toFixed(0)}%"></i></div>
+      <div class="dl-val c-${bd}">${r.avg == null ? '–' : r.avg < 0.5 ? '0' : '+' + (Math.round(r.avg * 10) / 10)}</div></div>`;
+  }).join('');
+}
+function renderDelays() {
+  const pg = $p('delays');
+  if (!pg) return;
+  // main lines: from the trains on each line on the Rail page (same live positions)
+  const lines = [];
+  if (state.segs) for (const l of LINES) {
+    const seen = new Map();
+    for (let i = 0; i < l.crs.length - 1; i++) for (const t of (state.segs[l.id + ':' + i] || { trains: [] }).trains) seen.set(t.id, t);
+    const ts = [...seen.values()], timed = ts.filter((t) => typeof t.delay === 'number' && !t.cancelled);
+    lines.push({ name: l.name, avg: timed.length ? timed.reduce((s, t) => s + Math.max(0, t.delay), 0) / timed.length : null,
+      sub: ts.length ? `${ts.length} train${ts.length === 1 ? '' : 's'} · ${ts.filter((t) => t.cancelled || t.delay >= 5).length} 5+ late` : 'No trains right now' });
+  }
+  lines.sort((a, b) => (b.avg ?? -1) - (a.avg ?? -1));
+  const ops = dlData && dlData.operators ? dlData.operators.filter((o) => o.trains >= 3).map((o) => ({ name: o.name, avg: o.avg, badge: opBadge(o.name, o.code),
+    sub: `${o.trains} trains · ${o.timed ? Math.round((o.onTime / o.timed) * 100) + '% on time' : 'no live times'}${o.cancelled ? ` · ${o.cancelled} cancelled` : ''}` })) : null;
+  const ov = dlData && dlData.overall;
+  pg.innerHTML = `<header class="head"><h1>Delays</h1><div class="sub">Average minutes late, from trains running now</div>
+      ${ov ? `<div class="sub"><span class="pill ${dlData.mode === 'live' ? 'live' : 'demo'}">${dlData.mode === 'live' ? 'Live' : 'Demo'}</span><span>${ov.timed} trains with live times · average +${ov.avg ?? 0} · <span class="c-mid">${ov.late5} 5+ late</span>${ov.cancelled ? ` · <span class="c-bad">${ov.cancelled} cancelled</span>` : ''}</span></div>` : ''}</header>
+    <section class="list dl"><div class="list-h">Main lines</div>${lines.length ? bars(lines) : '<div class="empty">Finding trains…</div>'}</section>
+    <section class="list dl"><div class="list-h">Train companies</div>${ops ? (ops.length ? bars(ops) : '<div class="empty">No trains with live times right now.</div>') : dlData === false ? '<div class="empty">Available when the live feed is connected.</div>' : '<div class="empty">Loading…</div>'}</section>
+    <p class="note">Each average is over trains running now with a live report; early trains count as on time. Network Rail regions aren't shown yet: the live feeds don't say which region a train is in, and placing them by map would be a guess.</p>`;
+}
+async function loadDelays() {
+  const r = await api.delays().catch(() => null);
+  dlData = r && r.operators ? r : false;
+  renderDelays();
+}
+
+function pageShown(name) {
+  page = name;
+  el.querySelectorAll('.np-nav button').forEach((b) => b.setAttribute('aria-current', String(b.dataset.np === name)));
+  clearInterval(tube.timer); tube.timer = null;
+  if (name === 'tube') { loadTube(); tube.timer = setInterval(() => { if (!el.hidden && !document.hidden && page === 'tube') loadTube(); }, 20000); }
+  if (name === 'status') api.tflStatus().then((r) => { stData = r || { lines: [] }; renderStatus(); });
+  if (name === 'delays') loadDelays();
+}
+export function showNetworkPage(name, smooth = true) {
+  if (!el) return;
+  const pager = el.querySelector('.np-pager'), pg = $p(name);
+  if (!pager || !pg) return;
+  pager.scrollTo({ left: pg.offsetLeft, behavior: smooth ? 'smooth' : 'auto' });
+  pageShown(name);
+}
+function fitPager() {
+  const pager = el && el.querySelector('.np-pager');
+  if (!pager || el.hidden) return;
+  const tabs = document.querySelector('.tabs');
+  pager.style.height = Math.max(240, window.innerHeight - pager.getBoundingClientRect().top - (tabs ? tabs.offsetHeight : 0)) + 'px';
+  const pg = $p(page); if (pg) pager.scrollLeft = pg.offsetLeft;
+}
+window.addEventListener('resize', () => setTimeout(fitPager, 200));
+
 export function showNetwork(container, handlers) {
   el = container;
   onTrain = handlers.train; onStation = handlers.station;
   if (!el.dataset.wired) {
     el.dataset.wired = '1';
+    el.innerHTML = `<nav class="np-nav" role="tablist">${PAGES.map(([k, n]) => `<button role="tab" data-np="${k}" aria-current="${k === page}">${esc(n)}</button>`).join('')}</nav>
+      <div class="np-pager">${PAGES.map(([k]) => `<section class="np-page" data-p="${k}"></section>`).join('')}</div>`;
+    const pager = el.querySelector('.np-pager');
+    // swiping: when the pager settles on a page, load that page
+    let t = null;
+    pager.addEventListener('scroll', () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        const i = Math.round(pager.scrollLeft / Math.max(1, pager.clientWidth));
+        const name = (PAGES[i] || PAGES[0])[0];
+        if (name !== page) pageShown(name);
+      }, 120);
+    }, { passive: true });
     el.addEventListener('click', (e) => {
+      const nb = e.target.closest('[data-np]');
+      if (nb) return showNetworkPage(nb.dataset.np);
+      const ta = e.target.closest('[data-tarea]');
+      if (ta) { tube.area = ta.dataset.tarea; return renderTube(); }
+      const ls = e.target.closest('[data-ls]');
+      if (ls && ls.closest('.np-page')) { const id = ls.dataset.ls; if (stOpen.has(id)) stOpen.delete(id); else stOpen.add(id); return renderStatus(); }
       const tl = e.target.closest('[data-tfl]');
-      if (tl) {
-        const l = tflLines.find((x) => x.id === tl.dataset.tfl);
-        if (l) statusSheet(l.id);
-        return;
-      }
-      if (e.target.closest('[data-tflall]')) return statusSheet();
+      if (tl) { stOpen.add(tl.dataset.tfl); return showNetworkPage('status'); }
+      if (e.target.closest('[data-tflall]')) return showNetworkPage('status');
+      const tr = e.target.closest('[data-train]');
+      if (tr) { const tt = tube.trains.find((x) => x.id === tr.dataset.train); if (tt && onTrain) onTrain(tt); return; }
       const sg = e.target.closest('[data-seg]');
       if (sg) return segSheet(sg.dataset.seg);
       const st = e.target.closest('[data-crs]');
@@ -213,6 +376,8 @@ export function showNetwork(container, handlers) {
     });
   }
   render();
+  renderTube();
+  requestAnimationFrame(() => { fitPager(); pageShown(page); });
   if (!state.at || Date.now() - state.at > 30000) refresh().then(render);
   api.tflStatus().then((r) => { if (r && r.lines) { tflLines = r.lines; render(); } });
   if (!timer) timer = setInterval(() => { if (!el.hidden && !document.hidden) refresh().then(render); }, 60000);
