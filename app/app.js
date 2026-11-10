@@ -9,7 +9,7 @@ import * as api from './api.js';
 import { closeCustomSheet, openSheet as openCustom, toast, bandOf, opBadge } from './ui.js';
 import { showMap, trainSheet, stationSheet, focusTrain } from './mapview.js';
 import * as route from './route.js';
-import { BY_CRS, searchStations } from './geo.js';
+import { BY_CRS, searchStations, addStations } from './geo.js';
 import { showBoards } from './boards.js';
 import { showNetwork } from './network.js';
 
@@ -459,6 +459,9 @@ window.addEventListener('resize', () => {
   const shape = window.innerWidth > window.innerHeight ? 'l' : 'p';
   if (shape !== lastShape) { lastShape = shape; render(); } else fitPanel();
 });
+
+// Irish (and later other countries') stations, once the live service is connected
+api.extraStations().then(addStations).catch(() => {});
 
 // ---------- render & events ----------
 function render() {

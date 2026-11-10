@@ -95,7 +95,7 @@ export function boardHTML(b, type) {
     </button>`;
   }).join('');
   const msgs = (b.messages || []).map((m) => `<p class="bmsg">${esc(m)}</p>`).join('');
-  const credit = b.mode === 'live' ? `<p class="credit">Departure and arrival information: National Rail</p>` : '';
+  const credit = b.mode === 'live' ? `<p class="credit">${esc(b.credit || 'Departure and arrival information: National Rail')}</p>` : '';
   return `${msgs}<div class="bhead"><span>Due</span><span>Exp</span><span>${type === 'arr' ? 'From' : 'To'}</span><span>Plat</span></div>${rows}${credit}`;
 }
 

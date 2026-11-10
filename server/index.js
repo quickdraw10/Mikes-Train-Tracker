@@ -26,6 +26,7 @@ import { createTimetable, loadTimetable } from './timetable.js';
 import { downloadSmart, buildStationPanel, smartDebug } from './panelbuild.js';
 import { createDecoder } from './decode.js';
 import { getBoard, serviceDetail } from './ldb.js';
+import { createIrish, loadStations as loadIrishStations, pollTrains as pollIrish, irishTrainsIn, irishBoard, irishTrain } from './ie.js';
 import { BY_CRS } from '../app/geo.js';
 import { createNationalSim } from '../app/national-sim.js';
 
@@ -40,6 +41,7 @@ let national; // the map, station boards and area movements
 let stats = { td: 0, trust: 0, lastTd: null, lastTrust: null, started: Date.now() };
 
 let livePanels = null; // panel layouts built from SMART (live only)
+let ieState = null;
 let panelDebug = null;
 
 if (live) {
@@ -153,6 +155,32 @@ if (live) {
     },
     train: (id) => liveDetailOf(nat, id)
   };
+
+  // ---- Ireland: Irish Rail's public real-time service ----
+  const ie = createIrish();
+  ieState = ie;
+  const ieStations = () => loadIrishStations(ie).then((n) => console.log(`[ie] ${n} stations`)).catch((e) => { ie.error = e.message; console.log('[ie] stations failed:', e.message); setTimeout(ieStations, 10 * 60000); });
+  ieStations();
+  setInterval(ieStations, 24 * 3600000);
+  const iePoll = () => pollIrish(ie).catch((e) => { ie.error = e.message; });
+  iePoll();
+  setInterval(iePoll, 30000);
+  const gb = national;
+  const isIrish = (code) => ie.stations.has(code) || code.length > 3;
+  national = {
+    ...gb,
+    trains: (box, max = 600) => {
+      const r = gb.trains(box, max);
+      // only ask about Ireland when the view reaches it
+      if (box.w > -5.3 || box.s > 55.5 || box.n < 51.3) return r;
+      const extra = irishTrainsIn(ie, box);
+      const trains = [...r.trains, ...extra].sort((a, b) => (b.delay ?? -99) - (a.delay ?? -99)).slice(0, max);
+      return { ...r, total: r.total + extra.length, trains };
+    },
+    board: (crs, type) => (isIrish(crs) ? irishBoard(ie, crs, type) : gb.board(crs, type)),
+    train: (id) => (String(id).startsWith('ie:') ? irishTrain(ie, id) : gb.train(id)),
+    service: (crs, type, id) => (isIrish(crs) ? irishTrain(ie, id) : gb.service(crs, type, id))
+  };
 } else {
   const sim = createSim();
   raw = sim.raw;
@@ -211,7 +239,12 @@ const server = http.createServer((req, res) => {
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return json(400, { error: 'Need lat and lon' });
     return json(200, national.moves(lat, lon, r));
   }
-  const tm = /^\/api\/train\/([A-Za-z0-9]{4,12})$/.exec(url.pathname);
+  if (url.pathname === '/api/stations-extra') {
+    // stations outside Great Britain the app can show (Ireland so far)
+    return json(200, { stations: ieState ? [...ieState.stations.values()] : [] });
+  }
+  if (url.pathname === '/api/ie-debug') return json(200, ieState ? { trains: ieState.trains.size, stations: ieState.stations.size, at: ieState.at ? new Date(ieState.at).toISOString() : null, error: ieState.error, sample: [...ieState.trains.values()].slice(0, 3) } : { note: 'Not running (demo mode)' });
+  const tm = /^\/api\/train\/([A-Za-z0-9:% ]{4,40})$/.exec(decodeURIComponent(url.pathname));
   if (tm) {
     Promise.resolve(national.train(tm[1])).then((d) => json(200, d || { error: 'Unknown train' })).catch((e) => json(500, { error: e.message }));
     return;
@@ -230,14 +263,14 @@ const server = http.createServer((req, res) => {
     if (id) return json(200, panelDebug[id] || { note: 'Still loading SMART, or no such panel. Panels: ' + STATION_PANELS.map((p) => p.id).join(', ') });
     return json(200, Object.fromEntries(Object.entries(panelDebug).map(([k, v]) => [k, { areas: v.areas, stationRows: v.stationRows, built: v.built, more: `/api/panel-debug?id=${k}` }])));
   }
-  const sv = /^\/api\/service\/([A-Za-z]{3})$/.exec(url.pathname);
+  const sv = /^\/api\/service\/([A-Za-z]{3,6})$/.exec(url.pathname);
   if (sv) {
     const type = url.searchParams.get('type') === 'arr' ? 'arr' : 'dep';
     Promise.resolve(national.service(sv[1].toUpperCase(), type, url.searchParams.get('id') || ''))
       .then((d) => json(200, d)).catch((e) => json(502, { error: e.message }));
     return;
   }
-  const bm = /^\/api\/board\/([A-Za-z]{3})$/.exec(url.pathname);
+  const bm = /^\/api\/board\/([A-Za-z]{3,6})$/.exec(url.pathname);
   if (bm) {
     const type = url.searchParams.get('type') === 'arr' ? 'arr' : 'dep';
     Promise.resolve(national.board(bm[1].toUpperCase(), type))

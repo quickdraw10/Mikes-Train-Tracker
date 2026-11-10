@@ -62,3 +62,11 @@ export async function service(crs, type, id) {
   if (mode === 'demo') return sim.service(crs, type, id);
   return get(`/api/service/${encodeURIComponent(crs)}?type=${type}&id=${encodeURIComponent(id)}`);
 }
+
+// Stations outside Great Britain the live service covers
+export async function extraStations() {
+  await ready;
+  if (mode !== 'server') return [];
+  const r = await get('/api/stations-extra').catch(() => null);
+  return (r && r.stations) || [];
+}

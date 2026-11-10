@@ -4,6 +4,15 @@ import { STATIONS } from './stations.js';
 
 export const BY_CRS = new Map(STATIONS.map(([crs, name, lat, lon]) => [crs, { crs, name, lat, lon }]));
 
+// Stations outside Great Britain (Ireland so far), added from the data service
+export function addStations(list) {
+  for (const s of list || []) {
+    if (!s.crs || BY_CRS.has(s.crs)) continue;
+    STATIONS.push([s.crs, s.name, s.lat, s.lon]);
+    BY_CRS.set(s.crs, { crs: s.crs, name: s.name, lat: s.lat, lon: s.lon, country: s.country || null });
+  }
+}
+
 export function km(aLat, aLon, bLat, bLon) {
   const r = Math.PI / 180;
   const x = (bLon - aLon) * r * Math.cos(((aLat + bLat) / 2) * r);
