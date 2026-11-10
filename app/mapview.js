@@ -545,7 +545,7 @@ export async function stationSheet(crs, type = 'dep') {
   const areas = loadList(AREAS_KEY);
   const saved = loadList(STATIONS_KEY);
   const html = () => `
-    <div class="st-head"><div><div class="meta">${lu ? esc((/\((Underground|DLR|Tram)\)$/.exec(st.name) || [, 'Underground'])[1]) : esc(crs)}</div><h2 id="sheet-title">${esc(lu ? luShort(st.name) : st.name)}</h2></div></div>
+    <div class="st-head"><div><div class="meta">${lu ? esc((/\((Underground|DLR|Tram)\)$/.exec(st.name) || [, 'Underground'])[1]) : st.country === 'fr' ? 'France · SNCF' : st.country === 'ie' ? 'Ireland · Iarnród Éireann' : esc(crs)}</div><h2 id="sheet-title">${esc(lu ? luShort(st.name) : st.name)}</h2></div></div>
     ${lu ? luView().tabs : `<div class="segctl" role="tablist">
       <button role="tab" data-act="type" data-arg="dep" aria-selected="${current === 'dep'}">Departures</button>
       <button role="tab" data-act="type" data-arg="arr" aria-selected="${current === 'arr'}">Arrivals</button>
