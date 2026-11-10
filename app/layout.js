@@ -29,6 +29,17 @@ export const CREWE = {
 };
 // Hull Paragon was tried, but Network Rail's SMART berth data has no Hull rows at all (its signal
 // box isn't in the train describer data), so there's no real layout to draw. Not added.
+// Doncaster: the London end is the south (Retford, Sheffield, Lincoln); north to York, Leeds and Hull
+export const DONCASTER = {
+  id: 'don', name: 'Doncaster', subtitle: 'South Yorkshire', crs: 'DON',
+  ends: ['RETFORD · SHEFFIELD · LINCOLN', 'YORK · LEEDS · HULL']
+};
+// Leeds: London trains come in at the west end (via Wakefield), with Bradford and Huddersfield;
+// the east end goes to York, Selby and Hull
+export const LEEDS = {
+  id: 'lds', name: 'Leeds', subtitle: 'West Yorkshire', crs: 'LDS',
+  ends: ['WAKEFIELD · BRADFORD · HUDDERSFIELD', 'YORK · SELBY · HULL']
+};
 export const STATION_PANELS = [YORK, LEEDS, DONCASTER, CLAPHAM, CREWE];
 
 function demoRoad(name, n, dir, cols) {
