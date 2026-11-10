@@ -344,13 +344,29 @@ function drawSelBar(d, pts = []) {
   const bar = document.getElementById('sel-bar');
   if (!selected) { bar.hidden = true; bar.innerHTML = ''; return; }
   const t = selected;
-  const bd = bandOf(d ? d.delay : t.delay, d ? d.cancelled : t.cancelled);
+  const delay = d ? d.delay : t.delay, cancelled = d ? d.cancelled : t.cancelled;
+  const bd = bandOf(delay, cancelled);
   const from = (d && d.origin) || t.origin || (pts[0] && pts[0].name);
-  const what = !d ? 'Loading its route…'
-    : pts.length ? `From ${esc(from || pts[0].name)} · ${pts.length} station${pts.length === 1 ? '' : 's'} reported`
-    : 'No station reports for this train yet';
-  bar.innerHTML = `<button class="sel-hc b-${bd}" data-sel="open" aria-label="Open ${esc(t.code)}">${esc(t.code)}</button>
-    <span class="sel-what">${what}<small>Tap the headcode for details</small></span>
+  const to = (d && d.dest) || t.dest;
+  // People know a train by its departure time and where it's going: the booked time from where it
+  // started, crossed out with the actual (or expected) time when it's running late
+  const o = d && d.stops && d.stops[0];
+  const booked = o && o.booked;
+  const actual = o ? (typeof o.actual === 'number' ? hhmm(o.actual) : o.actual) : null;
+  const late = o && typeof o.late === 'number' ? o.late : null;
+  const newTime = actual && actual !== booked && (late == null || late >= 1) ? { t: actual, w: 'left' } : !actual && o && o.expected && o.expected !== booked && /\d/.test(o.expected) ? { t: o.expected, w: 'exp' } : null;
+  const lu = isLu(t) && LU_LINES[t.line];
+  const timeBox = lu ? `<button class="sel-time lu" data-sel="open" style="background:${lu.color};color:${textOn(lu.color)}">${esc(lu.short)}</button>`
+    : booked ? `<button class="sel-time" data-sel="open" aria-label="Open the ${esc(booked)} train">${newTime
+      ? `<small class="was">${esc(booked)}</small><b class="c-${bd}">${esc(newTime.t)}</b><small>${newTime.w === 'left' ? 'left' : 'expected'}</small>`
+      : `<b>${esc(booked)}</b><small>${actual ? 'left' : 'departs'}</small>`}</button>`
+    : `<button class="sel-time" data-sel="open"><b class="c-none">${d ? '–' : '…'}</b><small>${d ? 'no time' : ''}</small></button>`;
+  const nm = (x) => esc(String(x || '').replace(/\s+International$/, ''));
+  const title = from && to ? `${nm(from)} → ${nm(to)}` : to ? `To ${esc(to)}` : from ? `From ${esc(from)}` : !d ? 'Loading its route…' : 'Train ' + esc(t.code);
+  const sub = !d ? '' : pts.length ? `${pts.length} station${pts.length === 1 ? '' : 's'} reported` : 'No station reports yet';
+  bar.innerHTML = `${timeBox}
+    <span class="sel-what" data-sel="open"><span class="sel-title">${title}</span>
+      <small>${[t.code && !lu ? `<span class="hc-pill b-${bd}">${esc(t.code)}</span>` : '', cancelled ? '<span class="c-bad">Cancelled</span>' : delay >= 1 ? `<span class="c-${bd}">+${delay} late</span>` : '', sub ? esc(sub) : ''].filter(Boolean).join('<i class="dot">·</i>')}</small></span>
     <button class="sel-clear" data-sel="clear">Clear map</button>`;
   bar.hidden = false;
 }
