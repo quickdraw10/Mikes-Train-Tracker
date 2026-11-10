@@ -251,7 +251,20 @@ const server = http.createServer((req, res) => {
     try { target = new URL(want); } catch { return json(400, { error: 'Bad address' }); }
     if (!['apis.opendatani.gov.uk', 'tiger.worldline.global'].includes(target.hostname)) return json(400, { error: 'Only Translink open data addresses' });
     fetch(target, { headers: { 'user-agent': 'MikesTrainTracker/1.0' }, signal: AbortSignal.timeout(15000) })
-      .then(async (r) => json(200, { url: target.href, status: r.status, type: r.headers.get('content-type'), cached: r.headers.get('x-cached'), body: (await r.text()).slice(0, 20000) }))
+      .then(async (r) => {
+        const text = await r.text();
+        const out = { url: target.href, status: r.status, type: r.headers.get('content-type'), cached: r.headers.get('x-cached'), length: text.length };
+        // grep: the snippets around a pattern, for finding the data addresses inside a big script
+        const g = url.searchParams.get('grep');
+        if (g) {
+          const re = new RegExp(g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\|/g, '|'), 'gi');
+          const hits = [];
+          let m;
+          while ((m = re.exec(text)) && hits.length < 80) hits.push(text.slice(Math.max(0, m.index - 120), m.index + 160));
+          out.hits = hits;
+        } else out.body = text.slice(0, 20000);
+        json(200, out);
+      })
       .catch((e) => json(200, { url: target.href, error: e.message }));
     return;
   }
