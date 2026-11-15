@@ -296,10 +296,10 @@ function renderRoute() {
       <div class="sum-text"><div class="t1">${s.lateCount} of ${s.total} trains running late</div><div class="t2">${worst}</div></div>
       <span class="sum-chev" aria-hidden="true">›</span>
     </button>
-    <div class="cols"><span class="updn"><button class="flip" data-act-route="flip" aria-label="Swap top and bottom: put ${last} at the top">⇅</button></span><span>Station</span></div>
+    <div class="cols"><span class="updn">${flipButton(r, upIsToTop, last)}</span><span>Station</span></div>
     <div class="strip" style="height:${height}px">${html}</div>
     ${legend()}
-    <p class="note">Left line: Up, towards ${upEnd}. Right line: Down, towards ${downEnd}. Tap ⇅ to swap top and bottom, or a station for its board. Trains within a few km of the line are shown; a section keeps the colour of the last train through it for 20 minutes.</p>`;
+    <p class="note">Left line: Up, towards ${upEnd}. Right line: Down, towards ${downEnd}. Tap the arrows to swap top and bottom (N marks the northern end), or a station for its board. Trains are placed by the last point Network Rail reported them at, including junctions and passing points between the stations shown; a section keeps the colour of the last train through it for 20 minutes.</p>`;
 }
 
 // The trains on the route, late ones first; tap one for its train screen
@@ -324,6 +324,15 @@ function routeTrainsSheet() {
 }
 
 // Swap which end is at the top
+// The swap button: left arrow = the Up line's direction, right arrow = the Down line's (they swap sides
+// when the route is flipped); N sits by the arrow pointing to the northern end of the route.
+function flipButton(r, upIsToTop, last) {
+  const top = BY_CRS.get(r.crs[0]), bottom = BY_CRS.get(r.crs[r.crs.length - 1]);
+  const northTop = top.lat >= bottom.lat;
+  const arrow = (toTop) => `<span class="fa${toTop === northTop ? ' n' + (northTop ? 't' : 'b') : ''}"><i>${toTop ? '↑' : '↓'}</i>${toTop === northTop ? '<em>N</em>' : ''}</span>`;
+  return `<button class="flip" data-act-route="flip" aria-label="Swap top and bottom: put ${last} at the top. North is at the ${northTop ? 'top' : 'bottom'}.">${arrow(upIsToTop)}${arrow(!upIsToTop)}</button>`;
+}
+
 function flipRoute() {
   const cur = route.currentRoute();
   useRoute({ id: cur.id.endsWith('~r') ? cur.id.slice(0, -2) : cur.id + '~r', name: cur.name.includes(' – ') ? cur.name.split(' – ').reverse().join(' – ') : cur.name, crs: [...cur.crs].reverse() });

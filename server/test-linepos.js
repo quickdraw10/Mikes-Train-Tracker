@@ -50,4 +50,19 @@ test('a train elsewhere is not counted on this line', () => {
   assert.equal(trainsOnLine(nat, LINE, band).length, 0);
 });
 
+test('a schedule that wanders off between two stations does not add other lines\' points', () => {
+  const tl = new Map(tiplocs);
+  for (let i = 0; i < 12; i++) tl.set('WCML' + i, { crs: null, stanox: String(100 + i), name: 'Elsewhere ' + i });
+  const wander = { uid: 'W', locs: ['NWCSTLE', ...Array.from({ length: 12 }, (_, i) => 'WCML' + i), 'MRPTH'].map((t) => ({ t })) };
+  const tt2 = { loadedAt: 2, tiplocs: tl, byDate: new Map([['d', new Map([['A', north], ['W', wander]])]]) };
+  const c = corridor(tt2, LINE);
+  assert.equal(c.pos.has('WCML3'), false);
+});
+
+test('a train that never touches the route\'s stations is not counted, even on shared tracks', () => {
+  const moorgate = { uid: 'M', locs: [{ t: 'CHTHILL' }, { t: 'ELSEWHR' }] };
+  const nat = { tt, trains: new Map([['t5', { id: 't5', code: '2V43', delay: 4, sched: moorgate, reports: { 4: { dep: 1 } }, updated: Date.now() }]]) };
+  assert.equal(trainsOnLine(nat, LINE, band).length, 0);
+});
+
 console.log(`\n${passed} line placement tests passed`);

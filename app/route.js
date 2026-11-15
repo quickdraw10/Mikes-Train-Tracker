@@ -40,8 +40,19 @@ export function cleanRoute(r) {
 }
 export const nameFor = (crs) => `${BY_CRS.get(crs[0]).name} – ${BY_CRS.get(crs[crs.length - 1]).name}`;
 
+// The Network tab's lines, so a route saved from one picks up later changes (e.g. added stations)
+const netLines = new Map();
+export function registerLines(lines) { for (const l of lines) netLines.set('net-' + l.id, l); }
+// a saved main line or Network line uses today's station list, reversed if it was flipped (~r)
+function fresh(r) {
+  if (!r) return r;
+  const base = r.id.replace(/~r$/, '');
+  const def = PRESETS.find((p) => p.id === base) || netLines.get(base);
+  if (!def) return r;
+  return { ...r, crs: r.id.endsWith('~r') ? [...def.crs].reverse() : [...def.crs] };
+}
 export function currentRoute() {
-  try { return cleanRoute(JSON.parse(localStorage.getItem(ROUTE_KEY) || 'null')) || PRESETS[4]; } catch { return PRESETS[4]; }
+  try { return fresh(cleanRoute(JSON.parse(localStorage.getItem(ROUTE_KEY) || 'null'))) || PRESETS[4]; } catch { return PRESETS[4]; }
 }
 export function setRoute(r) {
   const c = cleanRoute(r);

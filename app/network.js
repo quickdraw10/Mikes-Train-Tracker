@@ -9,7 +9,7 @@ import * as api from './api.js';
 let tflLines = null;
 import { BY_CRS } from './geo.js';
 import { band } from './model.js';
-import { place } from './route.js';
+import { place, registerLines } from './route.js';
 import { esc, shortLate, bandOf, openSheet, opBadge } from './ui.js';
 import { statusSheet, statusListHTML } from './tflstatus.js';
 import { zoomable } from './zoom.js';
@@ -115,6 +115,8 @@ function segsFrom(trainsOf) {
   }
   return segs;
 }
+
+registerLines(LINES);
 
 // ---- drawing ----
 const W = 400;

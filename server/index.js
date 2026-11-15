@@ -385,7 +385,7 @@ const server = http.createServer((req, res) => {
     for (const part of String(url.searchParams.get('r') || '').split(';').slice(0, 60)) {
       const [id, list] = part.split(':');
       const crs = String(list || '').split('-').filter((c) => /^[A-Z]{3}$/.test(c));
-      if (!/^[\w-]{1,40}$/.test(id || '') || crs.length < 2) continue;
+      if (!/^[\w~.-]{1,40}$/.test(id || '') || crs.length < 2) continue; // '~r' = the same route flipped
       routes[id] = url.searchParams.get('debug') ? lineDebug(natState, crs) : trainsOnLine(natState, crs, bandOf, now, memo) || [];
     }
     return json(200, { mode: 'live', at: new Date().toISOString(), routes });

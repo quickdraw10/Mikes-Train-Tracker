@@ -42,23 +42,42 @@ export function corridor(tt, crsList) {
   const idx = stationIndex(tt);
   const touching = new Set();
   for (const c of crsList) for (const s of idx.get(c) || []) touching.add(s);
+  // pass 1: for each stretch, the fewest timing points any train is booked through between its two
+  // stations. A schedule that wanders off between them (an empty stock working round London, say) is
+  // much longer than that and isn't used, so it can't put another line's points on this stretch.
+  const keysOf = (s) => {
+    const keys = [];
+    s.locs.forEach((l, i) => {
+      const li = lineIdx.get(crsOf(l.t));
+      if (li == null) return;
+      const last = keys[keys.length - 1];
+      if (last && last.li === li && last.end === i - 1) last.end = i;
+      else keys.push({ li, start: i, end: i });
+    });
+    return keys;
+  };
+  const shortest = new Map();
+  for (const s of touching) {
+    const keys = keysOf(s);
+    for (let j = 0; j < keys.length - 1; j++) {
+      const a = keys[j], b = keys[j + 1];
+      if (Math.abs(a.li - b.li) !== 1) continue;
+      const seg = Math.min(a.li, b.li), span = b.start - a.end;
+      if (!shortest.has(seg) || span < shortest.get(seg)) shortest.set(seg, span);
+    }
+  }
+  const ok = (seg, span) => span <= Math.ceil(shortest.get(seg) * 1.5) + 4;
   {
     for (const s of touching) {
       // the line's stations in this train's schedule, as runs of schedule rows (a big station can have several timing points)
-      const keys = [];
-      s.locs.forEach((l, i) => {
-        const li = lineIdx.get(crsOf(l.t));
-        if (li == null) return;
-        const last = keys[keys.length - 1];
-        if (last && last.li === li && last.end === i - 1) last.end = i;
-        else keys.push({ li, start: i, end: i });
-      });
+      const keys = keysOf(s);
       for (const k of keys) for (let i = k.start; i <= k.end; i++) if (!pos.has(s.locs[i].t)) pos.set(s.locs[i].t, k.li);
       // every timing point between two neighbouring line stations belongs to that stretch
       for (let j = 0; j < keys.length - 1; j++) {
         const a = keys[j], b = keys[j + 1];
         if (Math.abs(a.li - b.li) !== 1) continue;
         const span = b.start - a.end;
+        if (!ok(Math.min(a.li, b.li), span)) continue;
         for (let i = a.end + 1; i < b.start; i++) {
           const tip = s.locs[i].t;
           if (pos.has(tip)) continue;
@@ -70,7 +89,8 @@ export function corridor(tt, crsList) {
   // and by station code, for trains we have no schedule for
   const byCrs = new Map();
   for (const [tip, p] of pos) { const c = crsOf(tip); if (c && !byCrs.has(c)) byCrs.set(c, p); }
-  const out = { pos, byCrs, n: crsList.length };
+  const keyTips = new Set([...tt.tiplocs.entries()].filter(([, v]) => v.crs && lineIdx.has(v.crs)).map(([k]) => k));
+  const out = { pos, byCrs, keyTips, n: crsList.length };
   corridors.set(key, out);
   if (corridors.size > 200) corridors.delete(corridors.keys().next().value);
   return out;
@@ -105,6 +125,9 @@ export function trainsOnLine(nat, crsList, band, now = Date.now(), memo = new Ma
       const tip = s.locs[li].t;
       p = cor.pos.get(tip);
       if (p == null) continue;
+      // only trains that run along this route themselves: their own schedule calls at or passes at
+      // least one of its stations (so a Moorgate train sharing the tracks at Finsbury Park isn't counted)
+      if (!s.locs.some((l) => cor.keyTips.has(l.t))) continue;
       const r = rep[stanoxOf(tt, tip)] || {};
       departed = r.dep != null;
       last = (tt.tiplocs.get(tip) || {}).name || last;
