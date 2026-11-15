@@ -624,3 +624,18 @@ button.dl-row.link { cursor: pointer; }
 .src { font-style: normal; font: 600 9px var(--body); padding: 0 4px; margin-left: 3px; border-radius: 3px; vertical-align: 1px; text-transform: uppercase; letter-spacing: 0.04em; }
 .src.auto { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
 .src.man { background: color-mix(in srgb, var(--mid) 22%, transparent); color: var(--mid); }
+/* station platform view */
+.pl-wrap { overflow-x: auto; margin: 0 -4px; }
+.pl { display: block; width: 100%; min-width: 900px; height: auto; }
+.pl-row { fill: color-mix(in srgb, var(--card) 70%, transparent); pointer-events: none; }
+.pl-name { fill: var(--text); font: 700 15px var(--mono); }
+.pl-tick { fill: var(--text2); font: 600 12px var(--mono); text-anchor: middle; }
+.pl-grid { stroke: var(--line); stroke-width: 1; }
+.pl-now { stroke: var(--trim); stroke-width: 2; stroke-dasharray: 4 3; }
+.pl-t { cursor: pointer; }
+.pl-t rect, .pl-t polygon { stroke: rgba(0,0,0,0.25); stroke-width: 1; }
+.pl-t text { font: 600 12px var(--body); fill: var(--on-band); pointer-events: none; }
+.pl-t text.out { fill: var(--text); }
+.pl-t.b-ok rect, .pl-t.b-ok polygon { fill: var(--ok); } .pl-t.b-mid rect, .pl-t.b-mid polygon { fill: var(--mid); }
+.pl-t.b-bad rect, .pl-t.b-bad polygon { fill: var(--bad); } .pl-t.b-none rect, .pl-t.b-none polygon { fill: var(--none); }
+.pl-t.hid { opacity: 0.55; }

@@ -86,6 +86,12 @@ export async function findTrain(crs, time) {
   if (mode !== 'server') return { error: 'Finding a train needs the live feed.' };
   return get(`/api/find-train?crs=${crs.join(',')}&time=${encodeURIComponent(time)}`);
 }
+// a station's platforms over the next two hours
+export async function platforms(crs) {
+  await ready;
+  if (mode !== 'server') return { error: 'The platform view needs the live feed.' };
+  return get(`/api/platforms/${encodeURIComponent(crs)}`);
+}
 export async function delays() {
   await ready;
   if (mode !== 'server') return null;

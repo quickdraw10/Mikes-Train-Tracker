@@ -29,6 +29,7 @@ import { getBoard, serviceDetail } from './ldb.js';
 import { createTfl, loadTflStations, pollTfl, pollTflStatus, tflTrainsIn, tflBoard, tflTrain, trackernetAuth, loadTflShapes } from './tfl.js';
 import { trainsOnLine, lineDebug, lineCheck } from './linepos.js';
 import { findTrains, scheduleOnly } from './findtrain.js';
+import { platformsAt } from './platforms.js';
 import { trainDetail } from './timetable.js';
 import { LINES, PRESETS } from '../app/lines.js';
 import { band as bandOf } from '../app/model.js';
@@ -382,6 +383,12 @@ const server = http.createServer((req, res) => {
   if (url.pathname === '/api/tfl-lines') return json(200, { lines: tflState && tflState.shapes ? Object.values(tflState.shapes) : [] });
   if (url.pathname === '/api/tfl-status') return json(200, { lines: tflState ? tflState.status : [] });
   if (url.pathname === '/api/tfl-debug') return json(200, tflState ? { stations: tflState.stations.size, lines: tflState.byLine.size, trains: tflState.trains.size, viaTrackernet: [...tflState.trains.values()].filter((t) => t.source === 'trackernet').length, at: tflState.at ? new Date(tflState.at).toISOString() : null, key: Boolean(process.env.TFL_KEY), trackernetKey: process.env.TFL_TRACKERNET_KEY ? 'own key' : 'using main key', trackernetAuth: trackernetAuth(), shapes: Object.keys(tflState.shapes || {}).length, byLine: [...tflState.trains.values()].reduce((m, t) => ((m[t.line] = (m[t.line] || 0) + 1), m), {}), error: tflState.error, status: tflState.status.slice(0, 4), sample: [...tflState.trains.values()].slice(0, 4).map(({ stops, ...t }) => ({ ...t, stops: stops ? stops.length : null })) } : { note: 'Not running (demo mode)' });
+  const pm = /^\/api\/platforms\/([A-Za-z]{3})$/.exec(url.pathname);
+  if (pm) {
+    // which train is in which platform over the next two hours (live, from Darwin)
+    if (!process.env.LDB_STAFF_KEY) return json(200, { error: 'The platform view needs the National Rail staff feed (LDB_STAFF_KEY).' });
+    return platformsAt(pm[1].toUpperCase()).then((r) => json(200, r)).catch((e) => json(502, { error: 'Could not reach National Rail: ' + e.message }));
+  }
   if (url.pathname === '/api/find-train') {
     // ?crs=GLC,GLQ&time=17:34 -> today's passenger trains booked to leave there at (or near) that time
     if (!natState) return json(200, { error: 'Finding a train needs the live feed (not in demo mode).' });

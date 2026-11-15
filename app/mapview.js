@@ -407,6 +407,52 @@ function minsLate(booked, actual) {
 }
 
 // ---------- the train screen: from, to, next stop, on time, every stop ----------
+// Platform view: one row per platform, time across the top (10 minutes ago to 2 hours ahead). A train
+// calling here is a bar from arrival to departure; one starting or ending here is a marker at the
+// end we know (we don't guess how long it waits). Times are actual, else Darwin's expected, else
+// booked; colour shows how late it is there.
+function platformsHTML(p) {
+  if (!p) return '<div class="empty">Loading platforms…</div>';
+  if (p.error) return `<div class="empty">${esc(p.error)}</div>`;
+  if (!p.platforms.length) return '<div class="empty">No platform information for the next two hours.</div>';
+  const now = new Date(), nowM = now.getHours() * 60 + now.getMinutes();
+  const from = nowM - 10, span = 130, W = 1000, rowH = 34, left = 54, top = 22;
+  const mOf = (hhmm) => { const m = /^(\d\d):(\d\d)/.exec(hhmm || ''); if (!m) return null; let v = +m[1] * 60 + +m[2]; if (v < from - 600) v += 1440; return v; };
+  const x = (m) => left + ((m - from) / span) * (W - left - 8);
+  const lateOf = (t) => (t && t.booked && /\d/.test(t.time) ? minsLate(t.booked, t.time) : null);
+  const H = top + p.platforms.length * rowH + 6;
+  let g = '';
+  for (let m = Math.ceil(from / 30) * 30; m <= from + span; m += 30) g += `<line x1="${x(m)}" y1="${top - 6}" x2="${x(m)}" y2="${H}" class="pl-grid"/><text x="${x(m)}" y="12" class="pl-tick">${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}</text>`;
+  g += `<line x1="${x(nowM)}" y1="${top - 6}" x2="${x(nowM)}" y2="${H}" class="pl-now"/>`;
+  p.platforms.forEach((pl, i) => {
+    const y = top + i * rowH;
+    g += `<rect x="0" y="${y}" width="${W}" height="${rowH - 4}" class="pl-row"/><text x="8" y="${y + rowH / 2 + 2}" class="pl-name">${esc(pl)}</text>`;
+    for (const t of p.trains.filter((tt) => tt.platform === pl)) {
+      const a = t.arr ? mOf(t.arr.time) : null, dd = t.dep ? mOf(t.dep.time) : null;
+      const late = lateOf(t.dep) ?? lateOf(t.arr);
+      const bd = t.cancelled ? 'bad' : late == null ? 'none' : bandOf(late);
+      const label = esc((t.headcode ? t.headcode + ' ' : '') + (t.endsHere ? 'from ' + t.from : t.to));
+      const hidden = t.platformHidden ? ' hid' : '';
+      if (a != null && dd != null) {
+        const x1 = Math.max(left, x(a)), x2 = Math.min(W - 8, Math.max(x(dd), x1 + 6));
+        if (x2 < left || x1 > W) continue;
+        g += `<g class="pl-t b-${bd}${hidden}" data-act="ptrain" data-arg="${esc(t.id)}"><rect x="${x1}" y="${y + 3}" width="${x2 - x1}" height="${rowH - 10}" rx="5"/><text class="out" x="${x2 + 5}" y="${y + rowH / 2 + 2}">${label}</text></g>`;
+      } else {
+        const m = dd ?? a;
+        if (m == null || x(m) < left || x(m) > W) continue;
+        const xx = x(m);
+        // one end only: a marker, pointing out (starts here) or in (ends here)
+        const tri = dd != null ? `${xx},${y + 3} ${xx + 12},${y + rowH / 2 - 2} ${xx},${y + rowH - 7}` : `${xx},${y + 3} ${xx - 12},${y + rowH / 2 - 2} ${xx},${y + rowH - 7}`;
+        g += `<g class="pl-t b-${bd}${hidden}" data-act="ptrain" data-arg="${esc(t.id)}"><polygon points="${tri}"/><text class="out" x="${dd != null ? xx + 15 : xx + 4}" y="${y + rowH / 2 + 2}">${dd != null ? 'starts · ' : 'ends · '}${label}</text></g>`;
+      }
+    }
+  });
+  return `<div class="pl-wrap"><svg class="pl" viewBox="0 0 ${W} ${H}" role="img" aria-label="Platforms at ${esc(p.name)} over the next two hours">${g}</svg></div>
+    <div class="legend"><span><i class="b-ok"></i>On time</span><span><i class="b-mid"></i>2–9 late</span><span><i class="b-bad"></i>10+ late / cancelled</span><span><i class="b-none"></i>No live time</span></div>
+    <p class="note">Bars run from arrival to departure. ▶ starts here, ◀ ends here (only the end we know is drawn). Faded: platform not shown to the public yet.${p.unplatformed ? ` ${p.unplatformed} train${p.unplatformed === 1 ? ' has' : 's have'} no platform yet.` : ''} Tap a train for its page.</p>
+    <p class="credit">${esc(p.credit || '')}</p>`;
+}
+
 // Detailed view: every timing point the train is booked through (stations, junctions, passing
 // points) with the working timetable (half minutes as ½), platform and line, and each actual time
 // from TRUST with how it was reported: automatically by the signalling, or keyed in by staff
@@ -579,11 +625,12 @@ export async function stationSheet(crs, type = 'dep', back = null) {
   const saved = loadList(STATIONS_KEY);
   const html = () => `${back ? '<button class="back-link" data-act="back">‹ Back to the train</button>' : ''}
     <div class="st-head"><div><div class="meta">${lu ? esc((/\((Underground|DLR|Tram)\)$/.exec(st.name) || [, 'Underground'])[1]) : st.country === 'fr' ? 'France · SNCF' : st.country === 'ie' ? 'Ireland · Iarnród Éireann' : esc(crs)}</div><h2 id="sheet-title">${esc(lu ? luShort(st.name) : st.name)}</h2></div></div>
-    ${lu ? luView().tabs : `<div class="segctl" role="tablist">
+    ${lu ? luView().tabs : `<div class="segctl" role="tablist"${!st.country ? ' style="grid-template-columns: repeat(3, minmax(0, 1fr))"' : ''}>
       <button role="tab" data-act="type" data-arg="dep" aria-selected="${current === 'dep'}">Departures</button>
       <button role="tab" data-act="type" data-arg="arr" aria-selected="${current === 'arr'}">Arrivals</button>
+      ${!st.country ? `<button role="tab" data-act="type" data-arg="plat" aria-selected="${current === 'plat'}">Platforms</button>` : ''}
     </div>`}
-    <div class="sheet-body">${lu ? luView().body : boardHTML(data, current)}</div>
+    <div class="sheet-body">${lu ? luView().body : current === 'plat' ? platformsHTML(data) : boardHTML(data, current)}</div>
     <div class="sheet-actions">
       <button data-act="watch">${areas.some((a) => a.crs === crs) ? 'Watching area' : 'Watch this area'}</button>
       <button data-act="save">${saved.some((s) => s.crs === crs) ? 'Saved' : 'Save station'}</button>
@@ -591,7 +638,7 @@ export async function stationSheet(crs, type = 'dep', back = null) {
     <div class="sheet-actions one"><button data-act="build">Build a route from here</button></div>`;
   const luView = () => { const v = luBoardHTML(data, bound); if (v.bound) bound = v.bound; return v; };
   async function load() {
-    data = await api.board(crs, current).catch((e) => ({ error: e.message }));
+    data = await (current === 'plat' ? api.platforms(crs) : api.board(crs, current)).catch((e) => ({ error: e.message }));
     if (sheetOpen()) updateSheet(html());
   }
   openSheet(html(), {
@@ -601,6 +648,12 @@ export async function stationSheet(crs, type = 'dep', back = null) {
     watch: () => { watchArea(st); updateSheet(html()); },
     // a train on the board: its own screen, with a way back to this board
     svc: (id) => { const row = data && data.services && data.services.find((x) => x.id === id); if (row) trainSheet(boardTrain(row, crs, current, () => stationSheet(crs, current, back))); },
+    ptrain: (id) => {
+      const p = data && data.trains && data.trains.find((x) => x.id === id);
+      if (!p) return;
+      const row = { id: p.id, headcode: p.headcode, booked: (p.dep || p.arr || {}).booked, place: p.endsHere ? p.from : p.to, toc: p.operator, platform: p.platform };
+      trainSheet(boardTrain(row, crs, p.endsHere ? 'arr' : 'dep', () => stationSheet(crs, 'plat', back)));
+    },
     build: () => { closeCustomSheet(); window.dispatchEvent(new CustomEvent('mtt:build', { detail: { crs } })); },
     save: () => {
       const list = loadList(STATIONS_KEY);
