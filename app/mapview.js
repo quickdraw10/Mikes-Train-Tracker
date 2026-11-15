@@ -407,6 +407,41 @@ function minsLate(booked, actual) {
 }
 
 // ---------- the train screen: from, to, next stop, on time, every stop ----------
+// A location board: any timing point (junction, yard, loop or station) with every train booked
+// through it from an hour ago to two hours ahead, and what TRUST actually reported there.
+export async function locationSheet(tiploc, back = null) {
+  clearInterval(sheetTimer);
+  let b = null;
+  const tidy = (n) => String(n || '').toLowerCase().replace(/(^|[\s(/-])(\w)/g, (m, a, c) => a + c.toUpperCase()).replace(/\bJn\b/g, 'Jn');
+  const html = () => {
+    const rows = !b ? '<div class="empty">Loading…</div>' : b.error ? `<div class="empty">${esc(b.error)}</div>` : !b.rows.length ? '<div class="empty">No trains booked through here between an hour ago and two hours ahead.</div>'
+      : b.rows.map((r, i) => {
+        const lt = r.state === 'passed' ? r.late : r.nowLate;
+        const bd = r.state === 'cancelled' ? 'bad' : lt == null ? 'none' : bandOf(lt);
+        const right = r.state === 'passed' ? `${esc(r.actual)}${r.src === 'MANUAL' ? '<em class="src man">manual</em>' : ''}<small class="c-${bd}">${lt >= 1 ? '+' + lt : lt <= -1 ? -lt + ' early' : 'on time'}</small>`
+          : r.state === 'running' ? `<small class="c-${bd}">${lt > 0 ? '+' + lt + ' now' : 'running'}</small><small>${esc(r.at || '')}</small>`
+          : r.state === 'cancelled' ? '<small class="c-bad">Cancelled</small>' : r.state === 'noreport' ? '<small class="c-none">no report</small>' : '<small class="c-none">due</small>';
+        return `<button class="row grow" data-act="ltrain" data-arg="${i}"><span class="gtime"><b>${esc(r.booked)}</b><small>${esc(r.kind)}</small></span>
+          <span class="what">${esc(r.from)} → ${esc(r.to)}<small class="sub-line">${r.freight ? 'Freight / empty · ' : ''}${esc(r.operator || '')}${r.line ? ' · Line ' + esc(r.line) : ''}</small></span>
+          <span class="gright"><span class="lact">${right}</span><small class="hc-small">${esc(r.headcode || '')}</small></span></button>`;
+      }).join('');
+    const name = b && b.name ? tidy(b.name) : tiploc;
+    return `${back ? '<button class="back-link" data-act="back">‹ Back</button>' : ''}
+      <div class="st-head"><div><div class="meta">Location · ${esc(tiploc)}</div><h2 id="sheet-title">${esc(name)}</h2></div></div>
+      <div class="sheet-body"><section class="list">${rows}</section>
+      <p class="note">Every train booked through here, passenger, empty and freight, from the working timetable. Times on the right are what Network Rail reported here; trains not here yet show how late they're running now.</p></div>
+      <div class="sheet-actions">${b && b.crs && BY_CRS.has(b.crs) ? '<button data-act="board">Station board</button>' : ''}</div>`;
+  };
+  const load = async () => { b = await api.locationBoard(tiploc).catch((e) => ({ error: e.message })); if (sheetOpen()) updateSheet(html()); };
+  openSheet(html(), {
+    back: () => { if (back) back(); },
+    board: () => stationSheet(b.crs, 'dep', () => locationSheet(tiploc, back)),
+    ltrain: (i) => { const r = b && b.rows[+i]; if (r) trainSheet({ id: r.id, code: r.headcode, origin: r.from, dest: r.to, toc: r.operator, back: () => locationSheet(tiploc, back) }); }
+  }, () => clearInterval(sheetTimer));
+  load();
+  sheetTimer = setInterval(load, 60000);
+}
+
 // Platform view: one row per platform, time across the top (10 minutes ago to 2 hours ahead). A train
 // calling here is a bar from arrival to departure; one starting or ending here is a marker at the
 // end we know (we don't guess how long it waits). Times are actual, else Darwin's expected, else
@@ -465,7 +500,9 @@ function detailHTML(points) {
     const act = p.actual ? [p.actual.arr ? `${esc(p.actual.arr)}${src(p.actual.srcArr)}` : null, p.actual.dep ? `${esc(p.actual.dep)}${src(p.actual.srcDep)}` : null].filter(Boolean).join(' – ') : '';
     const late = typeof p.late === 'number' ? `<small class="c-${bandOf(p.late)}">${p.late >= 1 ? '+' + p.late : p.late <= -1 ? -p.late + ' early' : 'on time'}</small>` : '';
     const where = [p.platform ? 'Plat ' + esc(p.platform) : null, p.line ? 'Line ' + esc(p.line) : null].filter(Boolean).join(' · ');
-    const nameEl = p.crs && BY_CRS.has(p.crs) ? `<button class="sn-link" data-act="stn" data-arg="${esc(p.crs)}">${esc(p.name)}</button>` : esc(p.name);
+    // stations open their board; junctions and other timing points open their location board
+    const nameEl = p.crs && BY_CRS.has(p.crs) ? `<button class="sn-link" data-act="stn" data-arg="${esc(p.crs)}">${esc(p.name)}</button>`
+      : p.tiploc ? `<button class="sn-link" data-act="loc" data-arg="${esc(p.tiploc)}">${esc(p.name)}</button>` : esc(p.name);
     return `<div class="dp k-${p.kind}${p.passed ? ' reached' : ''}"><span class="dn">${nameEl}<small>${kind}${where ? ' · ' + where : ''}</small></span><span class="dw">${esc(wtt || '')}</span><span class="da">${act || (p.passed ? '<small class="c-none">no report</small>' : '')}${late}</span></div>`;
   }).join('');
   return `<div class="dhead"><span>Location</span><span>Booked (WTT)</span><span>Actual</span></div><div class="dpoints">${rows}</div>
@@ -535,7 +572,7 @@ export async function trainSheet(t) {
     const ln = isLu(t) && LU_LINES[t.line] ? LU_LINES[t.line] : null;
     const bigBox = ln ? `<div class="big lu-big" style="background:${ln.color};color:${textOn(ln.color)}">${esc(ln.short)}</div>` : `<div class="big b-${bd}">${esc(shortLate(delay, cancelled))}</div>`;
     const sub = ln ? `<p class="c-none">${esc(ln.name)}${/DLR|Trams/.test(ln.name) ? '' : ' line'} · live predictions</p>` : `<p class="c-${bd === 'none' ? 'none' : bd}">${esc(lateText(delay, cancelled))}</p>`;
-    return `${t.back ? '<button class="back-link" data-act="back">‹ Back to the board</button>' : ''}<div class="sheet-top">${bigBox}
+    return `${t.back ? '<button class="back-link" data-act="back">‹ Back</button>' : ''}<div class="sheet-top">${bigBox}
       <div><div class="meta">${esc(code)}${op ? ' · ' + opBadge(op, d && d.operatorCode) + esc(op) : ''}</div><h2 id="sheet-title">${title}</h2>${sub}</div></div>
       ${next}
       ${last ? `<p class="lastseen">${esc(last.event || 'Seen')} ${esc(last.name)}${last.at ? ' at ' + hhmm(last.at) : ''}</p>` : ''}
@@ -556,6 +593,7 @@ export async function trainSheet(t) {
     detail: () => { detailed = !detailed; updateSheet(html()); },
     view: (v) => { view = v; updateSheet(html()); },
     stn: (crs) => { const keep = t; stationSheet(crs, 'dep', () => trainSheet(keep)); },
+    loc: (tip) => { const keep = t; locationSheet(tip, () => trainSheet(keep)); },
     back: () => { if (t.back) t.back(); },
     onmap: () => { closeCustomSheet(); window.dispatchEvent(new CustomEvent('mtt:showtrain', { detail: { train: t } })); },
     route: () => {

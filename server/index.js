@@ -30,6 +30,7 @@ import { createTfl, loadTflStations, pollTfl, pollTflStatus, tflTrainsIn, tflBoa
 import { trainsOnLine, lineDebug, lineCheck } from './linepos.js';
 import { findTrains, scheduleOnly } from './findtrain.js';
 import { platformsAt } from './platforms.js';
+import { searchLocations, locationBoard } from './location.js';
 import { trainDetail } from './timetable.js';
 import { LINES, PRESETS } from '../app/lines.js';
 import { band as bandOf } from '../app/model.js';
@@ -388,6 +389,16 @@ const server = http.createServer((req, res) => {
     // which train is in which platform over the next two hours (live, from Darwin)
     if (!process.env.LDB_STAFF_KEY) return json(200, { error: 'The platform view needs the National Rail staff feed (LDB_STAFF_KEY).' });
     return platformsAt(pm[1].toUpperCase()).then((r) => json(200, r)).catch((e) => json(502, { error: 'Could not reach National Rail: ' + e.message }));
+  }
+  if (url.pathname === '/api/locations') {
+    // search timing points (junctions, yards, loops, stations) by name or code
+    if (!natState || !natState.tt || !natState.tt.loadedAt) return json(200, { results: [], note: 'Timetable still loading (or demo mode)' });
+    return json(200, { results: searchLocations(natState.tt, url.searchParams.get('q')) });
+  }
+  const lm = /^\/api\/location\/([A-Z0-9]{2,8})$/.exec(url.pathname.toUpperCase());
+  if (lm) {
+    if (!natState) return json(200, { error: 'Location boards need the live feed (not in demo mode).' });
+    return json(200, locationBoard(natState, lm[1]));
   }
   if (url.pathname === '/api/find-train') {
     // ?crs=GLC,GLQ&time=17:34 -> today's passenger trains booked to leave there at (or near) that time

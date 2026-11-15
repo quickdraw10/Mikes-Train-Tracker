@@ -92,6 +92,17 @@ export async function platforms(crs) {
   if (mode !== 'server') return { error: 'The platform view needs the live feed.' };
   return get(`/api/platforms/${encodeURIComponent(crs)}`);
 }
+// timing points (junctions, yards...) and their boards
+export async function locations(q) {
+  await ready;
+  if (mode !== 'server') return { results: [] };
+  return get(`/api/locations?q=${encodeURIComponent(q)}`);
+}
+export async function locationBoard(tiploc) {
+  await ready;
+  if (mode !== 'server') return { error: 'Location boards need the live feed.' };
+  return get(`/api/location/${encodeURIComponent(tiploc)}`);
+}
 export async function delays() {
   await ready;
   if (mode !== 'server') return null;

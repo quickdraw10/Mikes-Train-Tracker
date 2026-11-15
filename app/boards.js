@@ -4,7 +4,7 @@
 import * as api from './api.js';
 import { BY_CRS, nearest, searchStations } from './geo.js';
 import { esc, loadList, saveList, toast, boardHTML, luBoardHTML } from './ui.js';
-import { trainSheet, boardTrain } from './mapview.js';
+import { trainSheet, boardTrain, locationSheet } from './mapview.js';
 
 const STATIONS_KEY = 'mtt.stations';
 const $root = document.getElementById('boardsview');
@@ -29,6 +29,7 @@ function wire() {
     if (e.target.id === 'b-q') renderResults();
     if (e.target.id === 'f-q') { fx.crs = []; fx.label = ''; renderFindHits(); }
     if (e.target.id === 'f-time') fx.time = e.target.value;
+    if (e.target.id === 'l-q') searchLoc(e.target.value);
   });
   $root.addEventListener('keydown', (e) => {
     if (e.target.id === 'b-q' && e.key === 'Enter') { const f = $root.querySelector('#b-results button'); if (f) f.click(); }
@@ -37,6 +38,7 @@ function wire() {
     const el = e.target.closest('[data-crs],[data-act]');
     if (!el) return;
     const act = el.dataset.act;
+    if (act === 'loc') { const ul = $root.querySelector('#l-results'); if (ul) ul.hidden = true; return locationSheet(el.dataset.arg); }
     if (act === 'f-pick') { fx.crs = el.dataset.arg.split(','); fx.label = el.dataset.label; fx.results = null; return render(); }
     if (act === 'f-go') return findTrain();
     if (act === 'f-train') { const f = fx.results && fx.results.trains[+el.dataset.arg]; if (f) trainSheet({ id: f.id, code: f.headcode, dest: f.dest, origin: f.origin, toc: f.operator, delay: f.delay, cancelled: f.cancelled }); return; }
@@ -132,6 +134,21 @@ function findHTML() {
   </section>`;
 }
 
+// Junctions, yards and other timing points: search by name or code, open its location board
+let locTimer = null;
+function searchLoc(q) {
+  clearTimeout(locTimer);
+  locTimer = setTimeout(async () => {
+    const ul = $root.querySelector('#l-results');
+    if (!ul) return;
+    if (q.trim().length < 3) { ul.hidden = true; return; }
+    const r = await api.locations(q).catch(() => ({ results: [] }));
+    const tidy = (n) => (n === n.toUpperCase() ? n.toLowerCase().replace(/(^|[\s(/-])(\w)/g, (m, a, c) => a + c.toUpperCase()) : n);
+    ul.innerHTML = (r.results || []).map((h) => `<li><button data-act="loc" data-arg="${esc(h.tiploc)}"><b>${esc(tidy(h.name))}</b><small>${esc(h.crs || h.tiploc)}</small></button></li>`).join('') || '<li class="empty">No matching locations</li>';
+    ul.hidden = false;
+  }, 250);
+}
+
 function renderResults() {
   const q = $root.querySelector('#b-q');
   const ul = $root.querySelector('#b-results');
@@ -154,6 +171,9 @@ function render() {
         <ul id="b-results" class="results" hidden></ul>
       </div>
       ${findHTML()}
+      <section class="list"><div class="list-h">Junctions &amp; other locations</div>
+        <div class="find-form"><div class="search-block"><label class="search" for="l-q"><input id="l-q" type="search" placeholder="Junction, yard or loop, e.g. Colton Jn" autocomplete="off"></label><ul id="l-results" class="results" hidden></ul></div></div>
+      </section>
       <section class="list"><div class="list-h">Near you</div>
         ${near.length ? stationList(near, true) : `<button class="row" data-act="near"><span class="what">Find stations near me</span><span class="mins c-ok">Locate</span></button>`}
       </section>

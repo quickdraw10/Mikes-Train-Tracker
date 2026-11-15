@@ -242,7 +242,7 @@ export function trainDetail(tt, t) {
     const rep = sx && reported[sx];
     const kind = i === 0 ? 'origin' : i === s.locs.length - 1 ? 'dest' : l.pass != null ? 'pass' : (l.parr != null || l.pdep != null) ? 'stop' : 'call';
     return {
-      name: nameOfTiploc(tt, l.t), crs: (tt.tiplocs.get(l.t) || {}).crs || null, kind,
+      name: nameOfTiploc(tt, l.t), tiploc: l.t, crs: (tt.tiplocs.get(l.t) || {}).crs || null, kind,
       wtt: { arr: wttOf(l.arr), dep: wttOf(l.dep), pass: wttOf(l.pass) }, pub: { arr: hhmmOf(l.parr), dep: hhmmOf(l.pdep) },
       platform: (rep && rep.platform) || l.plat || null, line: (rep && rep.line) || l.line || null, path: l.path || null,
       actual: rep ? { arr: clock(rep.arr), dep: clock(rep.dep), srcArr: rep.srcArr || null, srcDep: rep.srcDep || null } : null,

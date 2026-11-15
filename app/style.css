@@ -639,3 +639,5 @@ button.dl-row.link { cursor: pointer; }
 .pl-t.b-ok rect, .pl-t.b-ok polygon { fill: var(--ok); } .pl-t.b-mid rect, .pl-t.b-mid polygon { fill: var(--mid); }
 .pl-t.b-bad rect, .pl-t.b-bad polygon { fill: var(--bad); } .pl-t.b-none rect, .pl-t.b-none polygon { fill: var(--none); }
 .pl-t.hid { opacity: 0.55; }
+.lact { display: flex; flex-direction: column; align-items: flex-end; font: 700 14px var(--mono); }
+.lact small { font: 600 11px var(--mono); }
