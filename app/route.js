@@ -132,6 +132,15 @@ export async function refresh(route) {
   if (state.busy) return null;
   state.busy = true;
   try {
+    // Preferred: placed by each train's own timetable and TRUST reports (every timing point between
+    // the route's stations counts); fallback (demo / timetable loading): by map position
+    const byLine = await api.routeTrains([[route.id, route.crs]]).catch(() => null);
+    if (byLine) {
+      state.trains = byLine.routes[route.id] || [];
+      state.mode = byLine.mode;
+      state.at = Date.now();
+      return summarise(route);
+    }
     const res = await Promise.all(boxesFor(route).map((b) => api.trains(b).catch(() => null)));
     const seen = new Map();
     let mode = null;

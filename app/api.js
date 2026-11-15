@@ -73,6 +73,13 @@ export async function extraStations() {
 }
 
 // London line status (TfL)
+// Trains on each line, placed by their own timetable and TRUST reports; null if the server can't (demo, timetable loading)
+export async function routeTrains(lines) {
+  await ready;
+  if (mode !== 'server') return null;
+  const r = await get('/api/route-trains?r=' + lines.map(([id, crs]) => `${encodeURIComponent(id)}:${crs.join('-')}`).join(';'));
+  return r && r.routes ? r : null;
+}
 export async function delays() {
   await ready;
   if (mode !== 'server') return null;

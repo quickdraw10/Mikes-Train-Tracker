@@ -27,6 +27,8 @@ import { downloadSmart, buildStationPanel, smartDebug, smartFind } from './panel
 import { createDecoder } from './decode.js';
 import { getBoard, serviceDetail } from './ldb.js';
 import { createTfl, loadTflStations, pollTfl, pollTflStatus, tflTrainsIn, tflBoard, tflTrain, trackernetAuth, loadTflShapes } from './tfl.js';
+import { trainsOnLine } from './linepos.js';
+import { band as bandOf } from '../app/model.js';
 import { createFrance, loadFrStations, frBoard, frTrain } from './fr.js';
 import { createIrish, loadStations as loadIrishStations, pollTrains as pollIrish, irishTrainsIn, irishBoard, irishTrain } from './ie.js';
 import { BY_CRS } from '../app/geo.js';
@@ -46,6 +48,7 @@ let livePanels = null; // panel layouts built from SMART (live only)
 let ieState = null;
 let tflState = null;
 let frState = null;
+let natState = null; // Great Britain trains, for /api/route-trains
 let panelDebug = null;
 let smartNames = null; // SMART station names / areas / STANOX, for /api/smart-find
 
@@ -61,6 +64,7 @@ if (live) {
   const stanoxCrs = loadStanoxCrs();
   const tt = createTimetable();
   const nat = createNational(tt);
+  natState = nat;
 
   // ---- signal panels (York, Clapham Junction, Crewe): layouts from SMART, signals learnt from the feed ----
   const crsStanox = {};
@@ -373,6 +377,19 @@ const server = http.createServer((req, res) => {
   if (url.pathname === '/api/tfl-lines') return json(200, { lines: tflState && tflState.shapes ? Object.values(tflState.shapes) : [] });
   if (url.pathname === '/api/tfl-status') return json(200, { lines: tflState ? tflState.status : [] });
   if (url.pathname === '/api/tfl-debug') return json(200, tflState ? { stations: tflState.stations.size, lines: tflState.byLine.size, trains: tflState.trains.size, viaTrackernet: [...tflState.trains.values()].filter((t) => t.source === 'trackernet').length, at: tflState.at ? new Date(tflState.at).toISOString() : null, key: Boolean(process.env.TFL_KEY), trackernetKey: process.env.TFL_TRACKERNET_KEY ? 'own key' : 'using main key', trackernetAuth: trackernetAuth(), shapes: Object.keys(tflState.shapes || {}).length, byLine: [...tflState.trains.values()].reduce((m, t) => ((m[t.line] = (m[t.line] || 0) + 1), m), {}), error: tflState.error, status: tflState.status.slice(0, 4), sample: [...tflState.trains.values()].slice(0, 4).map(({ stops, ...t }) => ({ ...t, stops: stops ? stops.length : null })) } : { note: 'Not running (demo mode)' });
+  if (url.pathname === '/api/route-trains') {
+    // ?r=ecml:KGX-SVG-...;hml:GLQ-STG-... -> the trains on each line's stretches, placed by their
+    // own timetable and TRUST reports (every timing point counts, not just the stations drawn)
+    if (!natState || !natState.tt || !natState.tt.loadedAt) return json(200, { unsupported: true, note: natState ? 'Timetable still loading' : 'Demo mode' });
+    const routes = {}, memo = new Map(), now = Date.now();
+    for (const part of String(url.searchParams.get('r') || '').split(';').slice(0, 60)) {
+      const [id, list] = part.split(':');
+      const crs = String(list || '').split('-').filter((c) => /^[A-Z]{3}$/.test(c));
+      if (!/^[\w-]{1,40}$/.test(id || '') || crs.length < 2) continue;
+      routes[id] = trainsOnLine(natState, crs, bandOf, now, memo) || [];
+    }
+    return json(200, { mode: 'live', at: new Date().toISOString(), routes });
+  }
   if (url.pathname === '/api/fr-debug') return json(200, frState ? { key: Boolean(process.env.SNCF_KEY), stations: frState.stations.size, sample: [...frState.stations.values()].slice(0, 3), trainsLooked: frState.trains.size, boardsCached: frState.boards.size, callsSinceStart: frState.calls, lastBoard: frState.at ? new Date(frState.at).toISOString() : null, error: frState.error } : { note: 'Not running (demo mode)' });
   if (url.pathname === '/api/ie-debug') return json(200, ieState ? { trains: ieState.trains.size, stations: ieState.stations.size, at: ieState.at ? new Date(ieState.at).toISOString() : null, error: ieState.error, sample: [...ieState.trains.values()].slice(0, 3) } : { note: 'Not running (demo mode)' });
   const tm = /^\/api\/train\/([A-Za-z0-9:% -]{4,48})$/.exec(decodeURIComponent(url.pathname));

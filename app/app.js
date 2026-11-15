@@ -273,7 +273,8 @@ function renderRoute() {
     html += `<div class="stn" style="left:10px;top:${y}px"></div><div class="stn" style="left:38px;top:${y}px"></div>`;
     html += `<button class="sname" data-act-route="station" data-crs="${esc(d.crs[i])}" style="top:${y - 3}px">${esc(name)}</button>`;
   });
-  const placed = d.trains.map((t) => ({ t, y: 7 + yAt(t.pos) })).sort((a, b) => a.y - b.y);
+  // only trains whose direction is known go in the up / down columns (no guessing); all count in the averages
+  const placed = d.trains.filter((t) => t.dir).map((t) => ({ t, y: 7 + yAt(t.pos) })).sort((a, b) => a.y - b.y);
   let lastChip = -Infinity;
   for (const { t, y } of placed) {
     html += `<div class="tdot b-${t.band}" style="left:${xOf(t.dir) - 6}px;top:${y - 9}px"></div>`;
@@ -311,7 +312,7 @@ function routeTrainsSheet() {
   const row = (t) => {
     const bd = bandOf(t.delay, t.cancelled);
     return `<button class="row" data-act="train" data-arg="${esc(t.id)}"><span class="hc b-${bd}">${esc(t.code)}</span>
-      <span class="what">${t.dest ? 'to ' + esc(t.dest) : 'towards ' + esc(t.dir === 'down' ? bottom : top)}<small class="sub-line">${opBadge(t.toc)}${esc([t.last ? 'last seen ' + t.last : null, t.toc].filter(Boolean).join(' · '))}</small></span><span class="mins c-${bd}">${esc(shortLate(t.delay, t.cancelled))}</span></button>`;
+      <span class="what">${t.dest ? 'to ' + esc(t.dest) : t.dir ? 'towards ' + esc(t.dir === 'down' ? bottom : top) : 'on this route'}<small class="sub-line">${opBadge(t.toc)}${esc([t.last ? 'last seen ' + t.last : null, t.toc].filter(Boolean).join(' · '))}</small></span><span class="mins c-${bd}">${esc(shortLate(t.delay, t.cancelled))}</span></button>`;
   };
   openCustom(`<div class="st-head"><div><div class="meta">${esc(r.name)}</div><h2 id="sheet-title">${late.length} of ${all.length} trains running late</h2></div></div>
     <div class="sheet-body list flush">

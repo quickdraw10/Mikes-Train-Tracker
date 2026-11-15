@@ -70,6 +70,15 @@ async function refresh() {
   if (state.busy) return;
   state.busy = true;
   try {
+    // Preferred: the server places every train by its own timetable and TRUST reports, so a delay
+    // anywhere between two drawn stations counts. Fallback (demo / timetable loading): by map position.
+    const byLine = await api.routeTrains(LINES.map((l) => [l.id, l.crs])).catch(() => null);
+    if (byLine) {
+      state.error = null; state.mode = byLine.mode;
+      state.segs = segsFrom((l) => byLine.routes[l.id] || []);
+      state.at = Date.now();
+      return;
+    }
     const res = await Promise.all(TILES.map((b) => api.trains(b, 1500).catch(() => null)));
     const seen = new Map();
     state.error = null;
@@ -77,10 +86,21 @@ async function refresh() {
     if (!seen.size && res.some((r) => r && r.error)) { state.error = res.find((r) => r && r.error).error; state.segs = null; state.memory.clear(); return; }
     if (!seen.size && !state.mode) return;
     const now = Date.now();
-    const segs = {};
-    for (const l of LINES) {
+    state.segs = segsFrom((l) => {
       const placed = place(l, [...seen.values()], state.prev[l.id] || new Map());
       state.prev[l.id] = new Map(placed.map((t) => [t.id, { pos: t.pos, dir: t.dir }]));
+      return placed;
+    });
+    state.at = now;
+  } finally { state.busy = false; }
+}
+
+// each stretch's trains and average delay
+function segsFrom(trainsOf) {
+  const segs = {};
+  for (const l of LINES) {
+    const placed = trainsOf(l);
+    {
       for (let i = 0; i < l.crs.length - 1; i++) {
         const inside = placed.filter((t) => t.pos >= i && t.pos < i + 1);
         const timed = inside.filter((t) => t.delay != null);
@@ -92,9 +112,8 @@ async function refresh() {
         segs[key] = { avg, band: avg == null ? 'none' : band({ delay: avg }), trains: inside, late, worst: Math.max(0, ...timed.map((t) => t.delay)) };
       }
     }
-    state.segs = segs;
-    state.at = now;
-  } finally { state.busy = false; }
+  }
+  return segs;
 }
 
 // ---- drawing ----
