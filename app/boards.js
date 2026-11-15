@@ -15,7 +15,7 @@ let data = null;
 let timer;
 let near = [];
 // Find a train: "the 17:34 from Glasgow" (it may have left hours ago)
-const fx = { crs: [], label: '', time: '', results: null, busy: false };
+const fx = { crs: [], label: '', time: '', day: 0, results: null, busy: false };
 const nowHHMM = () => new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
 
 export function showBoards() {
@@ -41,6 +41,7 @@ function wire() {
     if (act === 'loc') { const ul = $root.querySelector('#l-results'); if (ul) ul.hidden = true; return locationSheet(el.dataset.arg); }
     if (act === 'f-pick') { fx.crs = el.dataset.arg.split(','); fx.label = el.dataset.label; fx.results = null; return render(); }
     if (act === 'f-go') return findTrain();
+    if (act === 'f-day') { fx.day = +el.dataset.arg; fx.results = null; return render(); }
     if (act === 'f-train') { const f = fx.results && fx.results.trains[+el.dataset.arg]; if (f) trainSheet({ id: f.id, code: f.headcode, dest: f.dest, origin: f.origin, toc: f.operator, delay: f.delay, cancelled: f.cancelled }); return; }
     if (act === 'f-clear') { fx.crs = []; fx.label = ''; fx.results = null; return render(); }
     if (el.dataset.crs) return pick(el.dataset.crs);
@@ -109,13 +110,13 @@ async function findTrain() {
   if (!fx.crs.length) return toast('Pick the station first.');
   if (!/^\d{1,2}:\d{2}$/.test(t || '')) return toast('Enter the time, like 17:34.');
   fx.time = t; fx.busy = true; render();
-  fx.results = await api.findTrain(fx.crs, t).catch((e) => ({ error: e.message }));
+  fx.results = await api.findTrain(fx.crs, t, fx.day).catch((e) => ({ error: e.message }));
   fx.busy = false; render();
 }
 
 function findHTML() {
   const r = fx.results;
-  const rows = !r ? '' : r.error ? `<div class="empty">${esc(r.error)}</div>` : !r.trains.length ? `<div class="empty">No passenger trains booked from there within 15 minutes of ${esc(r.time)} today.</div>`
+  const rows = !r ? '' : r.error ? `<div class="empty">${esc(r.error)}</div>` : !r.trains.length ? `<div class="empty">No passenger trains booked from there within 15 minutes of ${esc(r.time)} ${r.day < 0 ? 'yesterday' : r.day > 0 ? 'tomorrow' : 'today'}.</div>`
     : (r.exact ? '' : `<div class="note pad">No train at exactly ${esc(r.time)}; these are the nearest.</div>`) + r.trains.map((f, i) => {
       const bd = f.cancelled ? 'bad' : f.delay == null ? 'none' : f.delay >= 10 ? 'bad' : f.delay >= 2 ? 'mid' : 'ok';
       return `<button class="row grow" data-act="f-train" data-arg="${i}">
@@ -127,6 +128,7 @@ function findHTML() {
     <div class="find-form">
       ${fx.crs.length ? `<button class="find-st" data-act="f-clear" aria-label="Change station"><span>From</span><b>${esc(fx.label)}</b><i>Change</i></button>`
         : `<div class="search-block"><label class="search" for="f-q"><span class="find-lbl">From</span><input id="f-q" type="search" placeholder="Station it leaves from" autocomplete="off"></label><ul id="f-results" class="results" hidden></ul></div>`}
+      <div class="segctl find-day" role="tablist">${[[-1, 'Yesterday'], [0, 'Today'], [1, 'Tomorrow']].map(([d, n]) => `<button role="tab" data-act="f-day" data-arg="${d}" aria-selected="${fx.day === d}">${n}</button>`).join('')}</div>
       <label class="find-time"><span>Departing at</span><input id="f-time" type="time" value="${esc(fx.time || nowHHMM())}"></label>
       <button class="find-go" data-act="f-go"${fx.busy ? ' disabled' : ''}>${fx.busy ? 'Finding…' : 'Find'}</button>
     </div>

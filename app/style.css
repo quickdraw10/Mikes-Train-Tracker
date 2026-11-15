@@ -641,3 +641,5 @@ button.dl-row.link { cursor: pointer; }
 .pl-t.hid { opacity: 0.55; }
 .lact { display: flex; flex-direction: column; align-items: flex-end; font: 700 14px var(--mono); }
 .lact small { font: 600 11px var(--mono); }
+
+.find-day { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; }

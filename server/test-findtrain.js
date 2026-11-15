@@ -39,4 +39,12 @@ test('a train with no live reports opens from the timetable', () => {
   assert.equal(scheduleOnly(nat, `sch:G1:${today}`, () => ({})).redirect, running.id);
 });
 
+test('a finished train keeps what happened: found with its arrival, opened with its reports', () => {
+  const nat2 = { tt, trains: new Map(), history: new Map([[`G2|${today}`, { id: 'old', code: '1Y99', uid: 'G2', runDate: today, delay: 4, terminated: true, at: { name: 'Carlisle' }, reports: { 1: { dep: 1 } }, updated: Date.now() }]]) };
+  const r = findTrains(nat2, ['GLC'], '17:40');
+  assert.equal(r.trains[0].status, 'Arrived Carlisle'); assert.equal(r.trains[0].delay, 4);
+  const d = scheduleOnly(nat2, `sch:G2:${today}`, (tt2, t) => ({ code: t.code, delay: t.delay }));
+  assert.equal(d.delay, 4); assert.match(d.liveNote, /finished/);
+});
+
 console.log(`\n${passed} find-a-train tests passed`);

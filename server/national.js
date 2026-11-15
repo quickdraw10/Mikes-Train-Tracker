@@ -230,9 +230,21 @@ export function movesNear(nat, lat, lon, radius = 15, now = Date.now()) {
 }
 
 export function pruneNational(nat, now = Date.now()) {
+  nat.history ||= new Map();
   for (const [id, t] of nat.trains) {
-    if (now - (t.updated || 0) > 3 * 60 * 60000 || (t.terminated && now - t.updated > 15 * 60000)) nat.trains.delete(id);
+    if (now - (t.updated || 0) > 3 * 60 * 60000 || (t.terminated && now - t.updated > 15 * 60000)) {
+      // keep what actually happened, so you can look back at a finished train (yesterday or today)
+      if (t.uid && t.runDate && t.reports && Object.keys(t.reports).length) nat.history.set(t.uid + '|' + t.runDate, compactTrain(t));
+      nat.trains.delete(id);
+    }
   }
+  for (const [k, h] of nat.history) if (now - h.updated > 36 * 3600000) nat.history.delete(k);
+}
+
+// A finished train's record: who it was and every report TRUST made, nothing else
+export function compactTrain(t) {
+  return { id: t.id, code: t.code, toc: t.toc || null, uid: t.uid, runDate: t.runDate, delay: t.delay ?? null, cancelled: !!t.cancelled,
+    terminated: !!t.terminated, updated: t.updated || Date.now(), reports: t.reports, at: t.at ? { crs: t.at.crs, name: t.at.name } : null, event: t.event || null, eventAt: t.eventAt || null };
 }
 
 // The panels know trains only by headcode, which can repeat around the country.

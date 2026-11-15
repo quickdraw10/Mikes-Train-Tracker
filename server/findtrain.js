@@ -25,19 +25,20 @@ export function minsOf(s) {
 }
 
 // stations: list of station codes (e.g. both Glasgow stations); time: "17:34"
-export function findTrains(nat, stations, time, now = Date.now()) {
+// day: -1 yesterday, 0 today, 1 tomorrow (the timetable holds those three days)
+export function findTrains(nat, stations, time, now = Date.now(), day = 0) {
   const tt = nat.tt;
   const want = minsOf(time);
   if (!tt || !tt.loadedAt) return { error: 'The timetable is still loading. Try again in a minute.' };
   if (want == null) return { error: 'Give a time like 17:34.' };
   const crsSet = new Set(stations);
-  const date = ukDate(now), nowM = ukMins(now);
-  const day = tt.byDate.get(date) || new Map();
+  const date = ukDate(now + day * 86400000), nowM = day < 0 ? 1440 * 2 : day > 0 ? -1 : ukMins(now);
+  const sched = tt.byDate.get(date) || new Map();
   // live trains by schedule, so each result can open the running train
   const live = new Map();
   for (const t of nat.trains.values()) if (t.sched) live.set(t.sched.uid + '|' + (t.runDate || date), t);
   const found = [];
-  for (const s of day.values()) {
+  for (const s of sched.values()) {
     if (!isPassenger(s) || !s.locs.length) continue;
     s.locs.forEach((l, i) => {
       if (!crsSet.has(crsOf(tt, l.t))) return;
@@ -48,6 +49,7 @@ export function findTrains(nat, stations, time, now = Date.now()) {
       const gap = Math.abs(dep - want);
       if (gap > 15) return;
       const t = live.get(s.uid + '|' + date) || null;
+      const h = !t && nat.history ? nat.history.get(s.uid + '|' + date) : null; // finished: what actually happened
       const o = s.locs[0], d = s.locs[s.locs.length - 1];
       found.push({
         gap, startsHere: i === 0,
@@ -57,16 +59,17 @@ export function findTrains(nat, stations, time, now = Date.now()) {
         origin: nameOfTiploc(tt, o.t), originDep: hhmmOf(o.pdep ?? o.dep),
         dest: nameOfTiploc(tt, d.t), destArr: hhmmOf(d.parr ?? d.arr),
         // what it's doing now, from TRUST (only when it's running)
-        status: !t ? (o.pdep ?? o.dep ?? 0) > nowM ? 'Not started yet' : 'No live reports'
+        status: h ? (h.cancelled ? 'Cancelled' : h.terminated ? `Arrived${h.at ? ' ' + h.at.name : ''}` : `Last reported${h.at ? ' at ' + h.at.name : ''}`)
+          : !t ? (o.pdep ?? o.dep ?? 0) > nowM ? 'Not started yet' : 'No live reports'
           : t.cancelled ? 'Cancelled' : t.terminated ? 'Arrived' : t.at ? `${t.event === 'Departed' ? 'Left' : 'At'} ${t.at.name}` : 'Running',
-        delay: t ? t.delay ?? null : null, cancelled: t ? !!t.cancelled : false
+        delay: t ? t.delay ?? null : h ? h.delay : null, cancelled: t ? !!t.cancelled : h ? h.cancelled : false
       });
     });
   }
   // exact time first, then nearest; trains starting at the station before ones calling there
   found.sort((a, b) => a.gap - b.gap || (b.startsHere - a.startsHere) || a.dep.localeCompare(b.dep));
   const exact = found.filter((f) => f.gap === 0);
-  return { date, time: hhmmOf(want), exact: exact.length, trains: (exact.length ? exact : found).slice(0, 12).map(({ gap, ...f }) => f) };
+  return { date, day, time: hhmmOf(want), exact: exact.length, trains: (exact.length ? exact : found).slice(0, 12).map(({ gap, ...f }) => f) };
 }
 
 // A train's page from the timetable alone, for a train that isn't running (yet, or any more)
@@ -76,8 +79,16 @@ export function scheduleOnly(nat, id, trainDetail) {
   if (!s) return { error: 'That train isn\'t in today\'s timetable.' };
   const running = [...nat.trains.values()].find((t) => t.sched === s);
   if (running) return { redirect: running.id };
+  // a finished train: its timetable with every report TRUST made
+  const h = nat.history && nat.history.get(uid + '|' + date);
+  if (h) {
+    const d = trainDetail(nat.tt, { ...h, sched: s });
+    d.mode = 'live';
+    d.liveNote = 'This train has finished. Times are what Network Rail reported along the way.';
+    return d;
+  }
   const d = trainDetail(nat.tt, { id, code: s.headcode, sched: s, reports: {}, delay: null });
   d.mode = 'live';
-  d.liveNote = 'From the timetable. There are no live reports for this train right now (not started yet, or it has finished).';
+  d.liveNote = 'From the timetable. There are no live reports for this train (not started yet, or it ran before the app last restarted).';
   return d;
 }

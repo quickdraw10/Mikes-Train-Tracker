@@ -72,6 +72,12 @@ if (live) {
   tt.tiplocCrs = loadTiplocCrs();
   const nat = createNational(tt);
   natState = nat;
+  // Finished trains' reports survive a restart if Railway has a volume mounted (DATA_DIR, e.g. /data)
+  if (process.env.DATA_DIR) {
+    const file = path.join(process.env.DATA_DIR, 'history.json');
+    try { const saved = JSON.parse(fs.readFileSync(file, 'utf8')); nat.history = new Map(saved); console.log(`[history] ${nat.history.size} finished trains loaded`); } catch { /* first run */ }
+    setInterval(() => { try { fs.writeFileSync(file + '.tmp', JSON.stringify([...(nat.history || new Map())])); fs.renameSync(file + '.tmp', file); } catch (e) { console.log('[history] could not save:', e.message); } }, 10 * 60000);
+  }
 
   // ---- signal panels (York, Clapham Junction, Crewe): layouts from SMART, signals learnt from the feed ----
   const crsStanox = {};
@@ -405,7 +411,8 @@ const server = http.createServer((req, res) => {
     if (!natState) return json(200, { error: 'Finding a train needs the live feed (not in demo mode).' });
     const crs = String(url.searchParams.get('crs') || '').toUpperCase().split(',').filter((c) => /^[A-Z]{3}$/.test(c)).slice(0, 6);
     if (!crs.length) return json(400, { error: 'Pick a station.' });
-    return json(200, findTrains(natState, crs, url.searchParams.get('time')));
+    const day = Math.max(-1, Math.min(1, Number(url.searchParams.get('day')) || 0));
+    return json(200, findTrains(natState, crs, url.searchParams.get('time'), Date.now(), day));
   }
   if (url.pathname === '/api/lines-check') {
     // every Network line and Route preset, stretch by stretch (?problems=1 for just the stretches with a problem)
