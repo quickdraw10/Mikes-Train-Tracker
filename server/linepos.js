@@ -76,7 +76,14 @@ export function corridor(tt, crsList) {
   return out;
 }
 
-const stanoxOf = (tt, tip) => (tt.tiplocs.get(tip) || {}).stanox || null;
+// STANOX codes compared as numbers: the timetable and TRUST don't always agree on leading zeros
+const norm = (x) => (x == null || x === '' ? null : String(Number(x)));
+const stanoxOf = (tt, tip) => norm((tt.tiplocs.get(tip) || {}).stanox);
+const reportsOf = (t) => {
+  const out = {};
+  for (const [k, v] of Object.entries(t.reports || {})) out[norm(k)] = v;
+  return out;
+};
 
 // Every train on the line now: { id, code, toc, dest, delay, cancelled, band, pos, dir, last }
 // memo: pass the same Map for several lines in one request, so each train's last point is found once
@@ -91,7 +98,7 @@ export function trainsOnLine(nat, crsList, band, now = Date.now(), memo = new Ma
     const s = t.sched;
     if (s) {
       // the furthest point in its schedule TRUST has reported it at
-      const rep = t.reports || {};
+      const rep = reportsOf(t);
       let li = memo.get(t.id);
       if (li == null) { li = -1; s.locs.forEach((l, i) => { const sx = stanoxOf(tt, l.t); if (sx && rep[sx]) li = i; }); memo.set(t.id, li); }
       if (li < 0) continue;
@@ -116,4 +123,24 @@ export function trainsOnLine(nat, crsList, band, now = Date.now(), memo = new Ma
     out.push({ id: t.id, code: t.code, toc: t.toc, dest: t.destName || null, delay: t.delay ?? null, cancelled: !!t.cancelled, band: band(t), pos: Math.round(p * 1000) / 1000, dir, last });
   }
   return out;
+}
+
+// What happened for one line, step by step (for /api/route-trains?debug=1)
+export function lineDebug(nat, crsList) {
+  const tt = nat.tt;
+  const cor = corridor(tt, crsList);
+  let trains = 0, withSched = 0, reported = 0, onLine = 0;
+  let sample = null;
+  for (const t of nat.trains.values()) {
+    trains++;
+    if (!t.sched) continue;
+    withSched++;
+    const rep = reportsOf(t);
+    let li = -1;
+    t.sched.locs.forEach((l, i) => { const sx = stanoxOf(tt, l.t); if (sx && rep[sx]) li = i; });
+    if (li >= 0) reported++; else if (!sample && Object.keys(rep).length) sample = { reportKeys: Object.keys(t.reports || {}).slice(0, 5), schedStanox: t.sched.locs.slice(0, 5).map((l) => (tt.tiplocs.get(l.t) || {}).stanox ?? null) };
+    if (li >= 0 && cor.pos.has(t.sched.locs[li].t)) onLine++;
+  }
+  const keys = crsList.map((c) => ({ crs: c, tiplocs: [...tt.tiplocs.entries()].filter(([, v]) => v.crs === c).map(([k, v]) => k + ':' + v.stanox) }));
+  return { timetableSchedules: tt.schedules, timingPointsOnLine: cor.pos.size, lineStations: keys, trains, withSched, reportedOnSchedule: reported, onLine, unmatchedSample: sample };
 }

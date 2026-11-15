@@ -27,7 +27,7 @@ import { downloadSmart, buildStationPanel, smartDebug, smartFind } from './panel
 import { createDecoder } from './decode.js';
 import { getBoard, serviceDetail } from './ldb.js';
 import { createTfl, loadTflStations, pollTfl, pollTflStatus, tflTrainsIn, tflBoard, tflTrain, trackernetAuth, loadTflShapes } from './tfl.js';
-import { trainsOnLine } from './linepos.js';
+import { trainsOnLine, lineDebug } from './linepos.js';
 import { band as bandOf } from '../app/model.js';
 import { createFrance, loadFrStations, frBoard, frTrain } from './fr.js';
 import { createIrish, loadStations as loadIrishStations, pollTrains as pollIrish, irishTrainsIn, irishBoard, irishTrain } from './ie.js';
@@ -386,7 +386,7 @@ const server = http.createServer((req, res) => {
       const [id, list] = part.split(':');
       const crs = String(list || '').split('-').filter((c) => /^[A-Z]{3}$/.test(c));
       if (!/^[\w-]{1,40}$/.test(id || '') || crs.length < 2) continue;
-      routes[id] = trainsOnLine(natState, crs, bandOf, now, memo) || [];
+      routes[id] = url.searchParams.get('debug') ? lineDebug(natState, crs) : trainsOnLine(natState, crs, bandOf, now, memo) || [];
     }
     return json(200, { mode: 'live', at: new Date().toISOString(), routes });
   }
