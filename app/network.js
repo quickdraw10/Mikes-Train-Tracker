@@ -18,6 +18,11 @@ const line = (id, name, codes) => ({ id, name, crs: codes.split(' ') });
 export const LINES = [
   line('ecml', 'East Coast Main Line', 'KGX SVG PBO GRA NNG RET DON YRK DAR DHM NCL BWK EDB'),
   line('abd', 'Edinburgh – Aberdeen', 'EDB INK KDY LEU DEE ARB ABD'),
+  line('hml', 'Highland Main Line', 'GLQ STG DBL GLE PTH DKD PIT BLA DLW NWR KIN AVM CAG INV'),
+  line('ainv', 'Aberdeen – Inverness', 'ABD INR HNT KEH ELG FOR NRN INV'),
+  line('kyle', 'Kyle Line', 'INV DIN GVE ACN STC PLK KYL'),
+  line('whl', 'West Highland Line', 'GLQ WES DMR DBC HLU GCH ART AUI CNR UTY BRO RAN CRR TUL RYB SBR FTW GLF ARG MLG'),
+  line('oban', 'Crianlarich – Oban', 'CNR TYL DAL TAY CON OBN'),
   line('scot', 'Edinburgh – Glasgow', 'EDB FKK GLQ'),
   line('wcml', 'West Coast Main Line', 'EUS WFJ MKC RUG NUN TAM LTV STA CRE WBQ WGN PRE LAN OXN PNR CAR GLC'),
   line('wbhm', 'West Coast via Birmingham', 'RUG COV BHI BHM WVH STA'),
@@ -39,9 +44,9 @@ export const LINES = [
   line('swml', 'South Western Main Line', 'WAT CLJ WOK BSK WIN SOU BMH'),
   line('bml', 'Brighton Main Line', 'VIC CLJ ECR GTW HHE BTN')
 ];
-const LABELS = { KGX: 'London', EDB: 'Edinburgh', GLC: 'Glasgow', ABD: 'Aberdeen', NCL: 'Newcastle', YRK: 'York', LDS: 'Leeds', MAN: 'Manchester', LIV: 'Liverpool', SHF: 'Sheffield', DON: 'Doncaster', CRE: 'Crewe', BHM: 'Birmingham', PBO: 'Peterborough', DBY: 'Derby', LEI: 'Leicester', BRI: 'Bristol', CDF: 'Cardiff', SWA: 'Swansea', RDG: 'Reading', NRW: 'Norwich', SOU: 'Southampton', BTN: 'Brighton', AFK: 'Ashford', CAR: 'Carlisle', PRE: 'Preston', SCA: 'Scarborough', DEE: 'Dundee', BMH: 'Bournemouth', HUL: 'Hull', NOT: 'Nottingham', EXD: 'Exeter', PLY: 'Plymouth', PNZ: 'Penzance', TAU: 'Taunton' };
+const LABELS = { KGX: 'London', EDB: 'Edinburgh', GLC: 'Glasgow', ABD: 'Aberdeen', INV: 'Inverness', PTH: 'Perth', FTW: 'Fort William', MLG: 'Mallaig', OBN: 'Oban', KYL: 'Kyle', NCL: 'Newcastle', YRK: 'York', LDS: 'Leeds', MAN: 'Manchester', LIV: 'Liverpool', SHF: 'Sheffield', DON: 'Doncaster', CRE: 'Crewe', BHM: 'Birmingham', PBO: 'Peterborough', DBY: 'Derby', LEI: 'Leicester', BRI: 'Bristol', CDF: 'Cardiff', SWA: 'Swansea', RDG: 'Reading', NRW: 'Norwich', SOU: 'Southampton', BTN: 'Brighton', AFK: 'Ashford', CAR: 'Carlisle', PRE: 'Preston', SCA: 'Scarborough', DEE: 'Dundee', BMH: 'Bournemouth', HUL: 'Hull', NOT: 'Nottingham', EXD: 'Exeter', PLY: 'Plymouth', PNZ: 'Penzance', TAU: 'Taunton' };
 const BELOW_LABEL = new Set(['PNZ']);
-const LEFT_LABEL = new Set(['PLY', 'EXD', 'TAU', 'SBY', 'LIV', 'GLC', 'PRE', 'CAR', 'CRE', 'BRI', 'CDF', 'SWA', 'BMH', 'SOU', 'BHM', 'RDG']);
+const LEFT_LABEL = new Set(['PLY', 'EXD', 'TAU', 'SBY', 'LIV', 'GLC', 'PRE', 'CAR', 'CRE', 'BRI', 'CDF', 'SWA', 'BMH', 'SOU', 'BHM', 'RDG', 'PTH', 'OBN']);
 
 // Map tiles that cover the lines, each fetched once
 function tiles() {
