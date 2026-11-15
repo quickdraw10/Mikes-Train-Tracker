@@ -1,3 +1,4 @@
+import { STATIONS } from '../app/stations.js';
 // Which stretch of a line each train is on — from the train's own timetable and TRUST reports,
 // not from where it sits on the map.
 //
@@ -17,14 +18,23 @@ const corridors = new Map(); // cache: line stations + timetable load time -> co
 // station's timing points (Clapham Junction has several), so fall back on the station that the
 // timing point's STANOX belongs to, from CORPUS.
 let normStanoxCrs = null, normFrom = null;
+// Parts of one station that Network Rail lists under their own code
+const SAME_STATION = { TAH: 'TAM' }; // Tamworth High Level is part of Tamworth
+// A timing point named exactly like a station (e.g. "Ebbsfleet International", used by HS1 trains)
+// belongs to it, even when Network Rail hasn't linked the two
+const normName = (n) => String(n || '').toLowerCase().replace(/^london\s+/, '').replace(/\bintl\b/g, 'international').replace(/[^a-z0-9]+/g, ' ').trim();
+const byName = new Map(STATIONS.map(([c, n]) => [normName(n), c]));
 function crsOfTip(tt, tip) {
   const t = tt.tiplocs.get(tip);
   if (!t) return null;
-  if (t.crs) return t.crs;
-  if (tt.tiplocCrs && tt.tiplocCrs[tip]) return tt.tiplocCrs[tip]; // CORPUS links this timing point to a station
+  const own = t.crs || (tt.tiplocCrs && tt.tiplocCrs[tip]) || null; // the timetable's or CORPUS's link
+  if (own) return SAME_STATION[own] || own;
+  const named = byName.get(normName(t.name));
+  if (named) return named;
   if (!tt.stanoxCrs || t.stanox == null) return null;
   if (normFrom !== tt.stanoxCrs) { normStanoxCrs = new Map(Object.entries(tt.stanoxCrs).map(([k, v]) => [String(Number(k)), v])); normFrom = tt.stanoxCrs; }
-  return normStanoxCrs.get(String(Number(t.stanox))) || null;
+  const viaStanox = normStanoxCrs.get(String(Number(t.stanox))) || null;
+  return viaStanox ? SAME_STATION[viaStanox] || viaStanox : null;
 }
 
 // station code -> the schedules that call at or pass it (built once per timetable load)

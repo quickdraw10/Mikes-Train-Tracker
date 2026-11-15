@@ -75,4 +75,14 @@ test('a station\'s second timing point with no code of its own still counts (via
   assert.ok(c.direct.get(2) >= 1, 'Alnmouth–Berwick has a train booked straight through');
 });
 
+test('Tamworth High Level counts as Tamworth; a timing point named like a station belongs to it', () => {
+  const tl = new Map([['BHAMNWS', { crs: 'BHM', stanox: '1', name: 'Birmingham New Street' }], ['TMWTHHL', { crs: 'TAH', stanox: '2', name: 'Tamworth Hl' }], ['BURTNOT', { crs: 'BUT', stanox: '3', name: 'Burton-on-Trent' }],
+    ['STPXBOX', { crs: null, stanox: '4', name: 'St Pancras International' }], ['EBSFLTI', { crs: null, stanox: '5', name: 'Ebbsfleet International' }]]);
+  const xc = { uid: 'X', locs: ['BHAMNWS', 'TMWTHHL', 'BURTNOT'].map((t) => ({ t })) };
+  const hs = { uid: 'H', locs: ['STPXBOX', 'EBSFLTI'].map((t) => ({ t })) };
+  const tt4 = { loadedAt: 4, tiplocs: tl, byDate: new Map([['d', new Map([['X', xc], ['H', hs]])]]) };
+  assert.ok(corridor(tt4, ['BHM', 'TAM', 'BUT']).direct.get(0) >= 1);
+  assert.ok(corridor(tt4, ['STP', 'EBD']).direct.get(0) >= 1);
+});
+
 console.log(`\n${passed} line placement tests passed`);
