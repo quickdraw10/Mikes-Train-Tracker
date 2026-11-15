@@ -382,6 +382,14 @@ const server = http.createServer((req, res) => {
     // every Network line and Route preset, stretch by stretch (?problems=1 for just the stretches with a problem)
     if (!natState || !natState.tt || !natState.tt.loadedAt) return json(200, { note: natState ? 'Timetable still loading' : 'Demo mode' });
     const only = url.searchParams.get('problems');
+    if (url.searchParams.get('short')) {
+      // plain text, one line per problem stretch: easy to read or screenshot on a phone
+      const rows = [...LINES.map((l) => ({ ...l, kind: 'network' })), ...PRESETS.map((p) => ({ ...p, kind: 'route' }))]
+        .map((l) => ({ kind: l.kind, ...lineCheck(natState, l, bandOf) }))
+        .flatMap((l) => l.stretches.filter((x) => x.problem).map((x) => `${l.kind === 'route' ? 'R ' : ''}${l.id}: ${x.from}-${x.to} (${x.pointsBetween} pts, ${x.trainsNow} now)`));
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+      return res.end(`${rows.length} problem stretches\n\n${rows.join('\n')}\n`);
+    }
     const all = [...LINES.map((l) => ({ ...l, kind: 'network' })), ...PRESETS.map((p) => ({ ...p, kind: 'route' }))].map((l) => ({ kind: l.kind, ...lineCheck(natState, l, bandOf) }));
     return json(200, { at: new Date().toISOString(), lines: all.length, withProblems: all.filter((l) => l.problems).length,
       results: only ? all.filter((l) => l.problems).map((l) => ({ ...l, stretches: l.stretches.filter((x) => x.problem) })) : all });
