@@ -19,11 +19,11 @@ const SECTION_MEMORY_MS = 20 * 60 * 1000;
 
 const preset = (id, name, codes) => ({ id, name, crs: codes.split(' ') });
 export const PRESETS = [
-  preset('ecml', 'East Coast Main Line', 'KGX SVG PBO GRA NNG RET DON YRK DAR DHM NCL BWK EDB'),
-  preset('wcml', 'West Coast Main Line', 'EUS WFJ MKC RUG NUN TAM LTV STA CRE WBQ WGN PRE LAN OXN PNR CAR GLC'),
+  preset('ecml', 'East Coast Main Line', 'KGX SVG HIT BIW SNO HUN PBO GRA NNG RET DON YRK THI NTR DAR DHM NCL MPT ALM BWK DUN EDB'),
+  preset('wcml', 'West Coast Main Line', 'EUS WFJ TRI LBZ MKC RUG NUN TAM LTV STA CRE WBQ WGN PRE LAN OXN PNR CAR LOC CRS MTH GLC'),
   preset('mml', 'Midland Main Line', 'STP LUT BDM WEL KET MHR LEI LBO EMD DBY CHD SHF'),
   preset('mml-not', 'Midland Main Line – Nottingham', 'STP LUT BDM WEL KET MHR LEI LBO EMD BEE NOT'),
-  preset('gwml', 'Great Western Main Line', 'PAD RDG DID SWI CPM BTH BRI'),
+  preset('gwml', 'Great Western Main Line', 'PAD SLO RDG DID SWI CPM BTH BRI'),
   preset('bml', 'Brighton Main Line', 'VIC CLJ ECR GTW HHE BTN'),
   preset('yrk-lds', 'York – Leeds', 'YRK ULL CHF MIK GRF CRG LDS'),
   preset('yrk-sca', 'York – Scarborough', 'YRK MLT SEM SCA'),
