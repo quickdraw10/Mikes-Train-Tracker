@@ -27,7 +27,8 @@ import { downloadSmart, buildStationPanel, smartDebug, smartFind } from './panel
 import { createDecoder } from './decode.js';
 import { getBoard, serviceDetail } from './ldb.js';
 import { createTfl, loadTflStations, pollTfl, pollTflStatus, tflTrainsIn, tflBoard, tflTrain, trackernetAuth, loadTflShapes } from './tfl.js';
-import { trainsOnLine, lineDebug } from './linepos.js';
+import { trainsOnLine, lineDebug, lineCheck } from './linepos.js';
+import { LINES, PRESETS } from '../app/lines.js';
 import { band as bandOf } from '../app/model.js';
 import { createFrance, loadFrStations, frBoard, frTrain } from './fr.js';
 import { createIrish, loadStations as loadIrishStations, pollTrains as pollIrish, irishTrainsIn, irishBoard, irishTrain } from './ie.js';
@@ -377,6 +378,14 @@ const server = http.createServer((req, res) => {
   if (url.pathname === '/api/tfl-lines') return json(200, { lines: tflState && tflState.shapes ? Object.values(tflState.shapes) : [] });
   if (url.pathname === '/api/tfl-status') return json(200, { lines: tflState ? tflState.status : [] });
   if (url.pathname === '/api/tfl-debug') return json(200, tflState ? { stations: tflState.stations.size, lines: tflState.byLine.size, trains: tflState.trains.size, viaTrackernet: [...tflState.trains.values()].filter((t) => t.source === 'trackernet').length, at: tflState.at ? new Date(tflState.at).toISOString() : null, key: Boolean(process.env.TFL_KEY), trackernetKey: process.env.TFL_TRACKERNET_KEY ? 'own key' : 'using main key', trackernetAuth: trackernetAuth(), shapes: Object.keys(tflState.shapes || {}).length, byLine: [...tflState.trains.values()].reduce((m, t) => ((m[t.line] = (m[t.line] || 0) + 1), m), {}), error: tflState.error, status: tflState.status.slice(0, 4), sample: [...tflState.trains.values()].slice(0, 4).map(({ stops, ...t }) => ({ ...t, stops: stops ? stops.length : null })) } : { note: 'Not running (demo mode)' });
+  if (url.pathname === '/api/lines-check') {
+    // every Network line and Route preset, stretch by stretch (?problems=1 for just the stretches with a problem)
+    if (!natState || !natState.tt || !natState.tt.loadedAt) return json(200, { note: natState ? 'Timetable still loading' : 'Demo mode' });
+    const only = url.searchParams.get('problems');
+    const all = [...LINES.map((l) => ({ ...l, kind: 'network' })), ...PRESETS.map((p) => ({ ...p, kind: 'route' }))].map((l) => ({ kind: l.kind, ...lineCheck(natState, l, bandOf) }));
+    return json(200, { at: new Date().toISOString(), lines: all.length, withProblems: all.filter((l) => l.problems).length,
+      results: only ? all.filter((l) => l.problems).map((l) => ({ ...l, stretches: l.stretches.filter((x) => x.problem) })) : all });
+  }
   if (url.pathname === '/api/route-trains') {
     // ?r=ecml:KGX-SVG-...;hml:GLQ-STG-... -> the trains on each line's stretches, placed by their
     // own timetable and TRUST reports (every timing point counts, not just the stations drawn)

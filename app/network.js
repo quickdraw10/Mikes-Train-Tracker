@@ -14,36 +14,8 @@ import { esc, shortLate, bandOf, openSheet, opBadge } from './ui.js';
 import { statusSheet, statusListHTML } from './tflstatus.js';
 import { zoomable } from './zoom.js';
 
-const line = (id, name, codes) => ({ id, name, crs: codes.split(' ') });
-export const LINES = [
-  line('ecml', 'East Coast Main Line', 'KGX SVG HIT BIW SNO HUN PBO GRA NNG RET DON YRK THI NTR DAR DHM NCL MPT ALM BWK DUN EDB'),
-  line('abd', 'Edinburgh – Aberdeen', 'EDB INK KDY LEU DEE ARB MTS STN ABD'),
-  line('hml', 'Highland Main Line', 'GLQ STG DBL GLE PTH DKD PIT BLA DLW NWR KIN AVM CAG INV'),
-  line('ainv', 'Aberdeen – Inverness', 'ABD INR HNT KEH ELG FOR NRN INV'),
-  line('kyle', 'Kyle Line', 'INV DIN GVE ACN STC PLK KYL'),
-  line('whl', 'West Highland Line', 'GLQ WES DMR DBC HLU GCH ART AUI CNR UTY BRO RAN CRR TUL RYB SBR FTW GLF ARG MLG'),
-  line('oban', 'Crianlarich – Oban', 'CNR TYL DAL TAY CON OBN'),
-  line('scot', 'Edinburgh – Glasgow', 'EDB FKK GLQ'),
-  line('wcml', 'West Coast Main Line', 'EUS WFJ TRI LBZ MKC RUG NUN TAM LTV STA CRE WBQ WGN PRE LAN OXN PNR CAR LOC CRS MTH GLC'),
-  line('wbhm', 'West Coast via Birmingham', 'RUG COV BHI BHM WVH STA'),
-  line('mcr', 'Crewe – Manchester', 'CRE WML SPT MAN'),
-  line('tpe', 'Liverpool – Leeds', 'LIV NLW MAN SYB HUD LDS'),
-  line('yrk', 'Leeds – York', 'LDS CRG GRF MIK CHF ULL YRK'),
-  line('sca', 'York – Scarborough', 'YRK MLT SEM SCA'),
-  line('hull', 'Leeds – Hull', 'MIK SBY HOW GBD BUH HUL'),
-  line('hulld', 'Doncaster – Hull', 'DON TNN GOO GBD'),
-  line('mml', 'Midland Main Line', 'STP LUT BDM WEL KET MHR LEI LBO EMD DBY CHD SHF'),
-  line('mmlnot', 'Midland Main Line – Nottingham', 'EMD BEE NOT'),
-  line('xc', 'Cross Country', 'BRI CNM BMV BHM TAM BUT DBY'),
-  line('gwml', 'Great Western Main Line', 'PAD SLO RDG DID SWI CPM BTH BRI'),
-  line('west', 'Bristol – Penzance', 'BRI WSM TAU TVP EXD NTA PLY BOD TRU RED SER PNZ'),
-  line('bh', 'Reading – Taunton (Berks & Hants)', 'RDG NBY PEW WSB CLC TAU'),
-  line('swales', 'South Wales Main Line', 'SWI BPW NWP CDF BGN PTA NTH SWA'),
-  line('geml', 'Great Eastern Main Line', 'LST SRA CHM COL IPS DIS NRW'),
-  line('hs1', 'High Speed 1', 'STP SFA EBD AFK'),
-  line('swml', 'South Western Main Line', 'WAT CLJ WOK BSK WIN SOU BMH'),
-  line('bml', 'Brighton Main Line', 'VIC CLJ ECR GTW HHE BTN')
-];
+import { LINES } from './lines.js';
+export { LINES };
 const LABELS = { KGX: 'London', EDB: 'Edinburgh', GLC: 'Glasgow', ABD: 'Aberdeen', INV: 'Inverness', PTH: 'Perth', FTW: 'Fort William', MLG: 'Mallaig', OBN: 'Oban', KYL: 'Kyle', NCL: 'Newcastle', YRK: 'York', LDS: 'Leeds', MAN: 'Manchester', LIV: 'Liverpool', SHF: 'Sheffield', DON: 'Doncaster', CRE: 'Crewe', BHM: 'Birmingham', PBO: 'Peterborough', DBY: 'Derby', LEI: 'Leicester', BRI: 'Bristol', CDF: 'Cardiff', SWA: 'Swansea', RDG: 'Reading', NRW: 'Norwich', SOU: 'Southampton', BTN: 'Brighton', AFK: 'Ashford', CAR: 'Carlisle', PRE: 'Preston', SCA: 'Scarborough', DEE: 'Dundee', BMH: 'Bournemouth', HUL: 'Hull', NOT: 'Nottingham', EXD: 'Exeter', PLY: 'Plymouth', PNZ: 'Penzance', TAU: 'Taunton' };
 const BELOW_LABEL = new Set(['PNZ']);
 const LEFT_LABEL = new Set(['PLY', 'EXD', 'TAU', 'SBY', 'LIV', 'GLC', 'PRE', 'CAR', 'CRE', 'BRI', 'CDF', 'SWA', 'BMH', 'SOU', 'BHM', 'RDG', 'PTH', 'OBN']);

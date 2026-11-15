@@ -66,6 +66,7 @@ export function corridor(tt, crsList) {
       if (!shortest.has(seg) || span < shortest.get(seg)) shortest.set(seg, span);
     }
   }
+  const direct = new Map(); // stretch -> how many schedules run straight between its two stations
   const ok = (seg, span) => span <= Math.ceil(shortest.get(seg) * 1.5) + 4;
   {
     for (const s of touching) {
@@ -78,6 +79,7 @@ export function corridor(tt, crsList) {
         if (Math.abs(a.li - b.li) !== 1) continue;
         const span = b.start - a.end;
         if (!ok(Math.min(a.li, b.li), span)) continue;
+        direct.set(Math.min(a.li, b.li), (direct.get(Math.min(a.li, b.li)) || 0) + 1);
         for (let i = a.end + 1; i < b.start; i++) {
           const tip = s.locs[i].t;
           if (pos.has(tip)) continue;
@@ -90,7 +92,7 @@ export function corridor(tt, crsList) {
   const byCrs = new Map();
   for (const [tip, p] of pos) { const c = crsOf(tip); if (c && !byCrs.has(c)) byCrs.set(c, p); }
   const keyTips = new Set([...tt.tiplocs.entries()].filter(([, v]) => v.crs && lineIdx.has(v.crs)).map(([k]) => k));
-  const out = { pos, byCrs, keyTips, n: crsList.length };
+  const out = { pos, byCrs, keyTips, direct, n: crsList.length };
   corridors.set(key, out);
   if (corridors.size > 200) corridors.delete(corridors.keys().next().value);
   return out;
@@ -166,4 +168,22 @@ export function lineDebug(nat, crsList) {
   }
   const keys = crsList.map((c) => ({ crs: c, tiplocs: [...tt.tiplocs.entries()].filter(([, v]) => v.crs === c).map(([k, v]) => k + ':' + v.stanox) }));
   return { timetableSchedules: tt.schedules, timingPointsOnLine: cor.pos.size, lineStations: keys, trains, withSched, reportedOnSchedule: reported, onLine, unmatchedSample: sample };
+}
+
+// A health check for a line: for each stretch, how many trains are booked straight between its two
+// stations, how many timing points lie between them, and how many trains are on it now. A stretch
+// no train is booked straight through points to a wrong station order or a missing station.
+export function lineCheck(nat, line, band) {
+  const tt = nat.tt;
+  const cor = corridor(tt, line.crs);
+  const placed = trainsOnLine(nat, line.crs, band) || [];
+  const stretches = [];
+  for (let i = 0; i < line.crs.length - 1; i++) {
+    let points = 0;
+    for (const p of cor.pos.values()) if (p > i && p < i + 1) points++;
+    const here = placed.filter((t) => t.pos >= i && t.pos < i + 1);
+    stretches.push({ from: line.crs[i], to: line.crs[i + 1], bookedThrough: cor.direct.get(i) || 0, pointsBetween: points, trainsNow: here.length,
+      noDirection: here.filter((t) => !t.dir).length, problem: (cor.direct.get(i) || 0) === 0 ? 'no train is booked straight between these two stations' : null });
+  }
+  return { id: line.id, name: line.name, trainsNow: placed.length, problems: stretches.filter((x) => x.problem).length, stretches };
 }
