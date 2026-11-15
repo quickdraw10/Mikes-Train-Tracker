@@ -14,6 +14,9 @@ let bound = null; // Underground: which direction's tab is open
 let data = null;
 let timer;
 let near = [];
+// Find a train: "the 17:34 from Glasgow" (it may have left hours ago)
+const fx = { crs: [], label: '', time: '', results: null, busy: false };
+const nowHHMM = () => new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
 
 export function showBoards() {
   if (!$root.dataset.ready) { $root.dataset.ready = '1'; wire(); }
@@ -22,15 +25,23 @@ export function showBoards() {
 }
 
 function wire() {
-  $root.addEventListener('input', (e) => { if (e.target.id === 'b-q') renderResults(); });
+  $root.addEventListener('input', (e) => {
+    if (e.target.id === 'b-q') renderResults();
+    if (e.target.id === 'f-q') { fx.crs = []; fx.label = ''; renderFindHits(); }
+    if (e.target.id === 'f-time') fx.time = e.target.value;
+  });
   $root.addEventListener('keydown', (e) => {
     if (e.target.id === 'b-q' && e.key === 'Enter') { const f = $root.querySelector('#b-results button'); if (f) f.click(); }
   });
   $root.addEventListener('click', (e) => {
     const el = e.target.closest('[data-crs],[data-act]');
     if (!el) return;
-    if (el.dataset.crs) return pick(el.dataset.crs);
     const act = el.dataset.act;
+    if (act === 'f-pick') { fx.crs = el.dataset.arg.split(','); fx.label = el.dataset.label; fx.results = null; return render(); }
+    if (act === 'f-go') return findTrain();
+    if (act === 'f-train') { const f = fx.results && fx.results.trains[+el.dataset.arg]; if (f) trainSheet({ id: f.id, code: f.headcode, dest: f.dest, origin: f.origin, toc: f.operator, delay: f.delay, cancelled: f.cancelled }); return; }
+    if (act === 'f-clear') { fx.crs = []; fx.label = ''; fx.results = null; return render(); }
+    if (el.dataset.crs) return pick(el.dataset.crs);
     if (act === 'bound') { bound = el.dataset.arg; render(); }
     if (act === 'type') { type = el.dataset.arg; data = null; render(); load(); }
     if (act === 'back') { current = null; clearInterval(timer); render(); }
@@ -80,6 +91,47 @@ function stationList(list, withKm) {
   return list.map((s) => `<button class="row" data-crs="${esc(s.crs)}"><span class="hc code-pill">${esc(s.crs)}</span><span class="what">${esc(s.name)}</span>${withKm ? `<span class="mins c-none">${s.km.toFixed(1)} km</span>` : ''}</button>`).join('');
 }
 
+function renderFindHits() {
+  const q = $root.querySelector('#f-q'), ul = $root.querySelector('#f-results');
+  if (!q || !ul) return;
+  const hits = searchStations(q.value).filter((h) => !BY_CRS.get(h.crs) || !BY_CRS.get(h.crs).country);
+  const word = q.value.trim();
+  const all = hits.length > 1 && word.length >= 3 ? hits.filter((h) => h.name.toLowerCase().startsWith(word.toLowerCase())) : [];
+  ul.innerHTML = (all.length > 1 ? `<li><button data-act="f-pick" data-arg="${all.map((h) => h.crs).join(',')}" data-label="${esc(word.replace(/^./, (c) => c.toUpperCase()))} (any station)"><b>Any ${esc(word)} station</b><small>${all.length} stations</small></button></li>` : '') +
+    hits.map((h) => `<li><button data-act="f-pick" data-arg="${h.crs}" data-label="${esc(h.name)}"><b>${esc(h.name)}</b><small>${h.crs}</small></button></li>`).join('');
+  ul.hidden = !hits.length;
+}
+
+async function findTrain() {
+  const t = ($root.querySelector('#f-time') || {}).value || fx.time;
+  if (!fx.crs.length) return toast('Pick the station first.');
+  if (!/^\d{1,2}:\d{2}$/.test(t || '')) return toast('Enter the time, like 17:34.');
+  fx.time = t; fx.busy = true; render();
+  fx.results = await api.findTrain(fx.crs, t).catch((e) => ({ error: e.message }));
+  fx.busy = false; render();
+}
+
+function findHTML() {
+  const r = fx.results;
+  const rows = !r ? '' : r.error ? `<div class="empty">${esc(r.error)}</div>` : !r.trains.length ? `<div class="empty">No passenger trains booked from there within 15 minutes of ${esc(r.time)} today.</div>`
+    : (r.exact ? '' : `<div class="note pad">No train at exactly ${esc(r.time)}; these are the nearest.</div>`) + r.trains.map((f, i) => {
+      const bd = f.cancelled ? 'bad' : f.delay == null ? 'none' : f.delay >= 10 ? 'bad' : f.delay >= 2 ? 'mid' : 'ok';
+      return `<button class="row grow" data-act="f-train" data-arg="${i}">
+        <span class="gtime"><b>${esc(f.dep)}</b><small>${f.startsHere ? 'starts' : 'calls'}</small></span>
+        <span class="what">to ${esc(f.dest)}<small class="sub-line">${f.startsHere ? (fx.crs.length > 1 ? `from ${esc(f.station)} · ` : '') : `${esc(f.originDep)} from ${esc(f.origin)} · `}${esc(f.operator || '')}</small><small class="sub-line"><span class="c-${bd === 'none' ? 'none' : bd}">${esc(f.status)}${f.delay > 0 && !f.cancelled ? ` · +${f.delay}` : ''}</span></small></span>
+        <span class="gright"><span class="mins">›</span><small class="hc-small">${esc(f.headcode || '')}</small></span></button>`;
+    }).join('');
+  return `<section class="list find"><div class="list-h">Find a train</div>
+    <div class="find-form">
+      ${fx.crs.length ? `<button class="find-st" data-act="f-clear" aria-label="Change station"><span>From</span><b>${esc(fx.label)}</b><i>Change</i></button>`
+        : `<div class="search-block"><label class="search" for="f-q"><span class="find-lbl">From</span><input id="f-q" type="search" placeholder="Station it leaves from" autocomplete="off"></label><ul id="f-results" class="results" hidden></ul></div>`}
+      <label class="find-time"><span>Departing at</span><input id="f-time" type="time" value="${esc(fx.time || nowHHMM())}"></label>
+      <button class="find-go" data-act="f-go"${fx.busy ? ' disabled' : ''}>${fx.busy ? 'Finding…' : 'Find'}</button>
+    </div>
+    ${rows}
+  </section>`;
+}
+
 function renderResults() {
   const q = $root.querySelector('#b-q');
   const ul = $root.querySelector('#b-results');
@@ -93,7 +145,7 @@ function render() {
     $root.classList.remove('lu');
     const saved = loadList(STATIONS_KEY);
     $root.innerHTML = `
-      <header class="head"><h1>Station boards</h1><div class="sub">Departures and arrivals for any station</div></header>
+      <header class="head"><h1>Station boards</h1><div class="sub">Departures and arrivals for any station, or find a train by when it left</div></header>
       <div class="search-block">
         <label class="search" for="b-q">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
@@ -101,6 +153,7 @@ function render() {
         </label>
         <ul id="b-results" class="results" hidden></ul>
       </div>
+      ${findHTML()}
       <section class="list"><div class="list-h">Near you</div>
         ${near.length ? stationList(near, true) : `<button class="row" data-act="near"><span class="what">Find stations near me</span><span class="mins c-ok">Locate</span></button>`}
       </section>

@@ -1,0 +1,83 @@
+// Find a train the way people think of it: "the 17:34 from Glasgow Central". It may have left hours
+// ago. We look through today's timetable for passenger trains booked to leave that station at that
+// time (where it starts, or anywhere it calls), and link each to the live train if it's running.
+
+import { hhmmOf, nameOfTiploc, OPERATORS } from './timetable.js';
+
+// today's date and the time now in Britain
+const ukDate = (ms) => new Date(ms).toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
+const ukMins = (ms) => { const [h, m] = new Date(ms).toLocaleTimeString('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hour12: false }).split(':'); return (+h % 24) * 60 + +m; };
+
+const FREIGHT_CATS = /^(E|J|P|D|B|H)/; // not passenger (same idea as the timetable's own check)
+const isPassenger = (s) => s.atoc && s.atoc !== 'ZZ' && !FREIGHT_CATS.test(s.cat || '');
+
+// station code for a timing point: the timetable's own, else CORPUS (big stations have several points)
+function crsOf(tt, tip) {
+  const t = tt.tiplocs.get(tip);
+  if (!t) return null;
+  return t.crs || (tt.tiplocCrs && tt.tiplocCrs[tip]) || null;
+}
+
+// "17:34" / "1734" -> minutes after midnight
+export function minsOf(s) {
+  const m = /^(\d{1,2}):?(\d{2})$/.exec(String(s || '').trim());
+  return m && +m[1] < 24 && +m[2] < 60 ? +m[1] * 60 + +m[2] : null;
+}
+
+// stations: list of station codes (e.g. both Glasgow stations); time: "17:34"
+export function findTrains(nat, stations, time, now = Date.now()) {
+  const tt = nat.tt;
+  const want = minsOf(time);
+  if (!tt || !tt.loadedAt) return { error: 'The timetable is still loading. Try again in a minute.' };
+  if (want == null) return { error: 'Give a time like 17:34.' };
+  const crsSet = new Set(stations);
+  const date = ukDate(now), nowM = ukMins(now);
+  const day = tt.byDate.get(date) || new Map();
+  // live trains by schedule, so each result can open the running train
+  const live = new Map();
+  for (const t of nat.trains.values()) if (t.sched) live.set(t.sched.uid + '|' + (t.runDate || date), t);
+  const found = [];
+  for (const s of day.values()) {
+    if (!isPassenger(s) || !s.locs.length) continue;
+    s.locs.forEach((l, i) => {
+      if (!crsSet.has(crsOf(tt, l.t))) return;
+      const last = i === s.locs.length - 1;
+      // a departure we can match: its public time where it has one, else the working time; not a pass
+      const dep = last ? null : (l.pdep ?? l.dep);
+      if (dep == null) return;
+      const gap = Math.abs(dep - want);
+      if (gap > 15) return;
+      const t = live.get(s.uid + '|' + date) || null;
+      const o = s.locs[0], d = s.locs[s.locs.length - 1];
+      found.push({
+        gap, startsHere: i === 0,
+        id: t ? t.id : `sch:${s.uid}:${date}`,
+        headcode: s.headcode, operator: OPERATORS[s.atoc] || s.atoc,
+        station: nameOfTiploc(tt, l.t), dep: hhmmOf(dep),
+        origin: nameOfTiploc(tt, o.t), originDep: hhmmOf(o.pdep ?? o.dep),
+        dest: nameOfTiploc(tt, d.t), destArr: hhmmOf(d.parr ?? d.arr),
+        // what it's doing now, from TRUST (only when it's running)
+        status: !t ? (o.pdep ?? o.dep ?? 0) > nowM ? 'Not started yet' : 'No live reports'
+          : t.cancelled ? 'Cancelled' : t.terminated ? 'Arrived' : t.at ? `${t.event === 'Departed' ? 'Left' : 'At'} ${t.at.name}` : 'Running',
+        delay: t ? t.delay ?? null : null, cancelled: t ? !!t.cancelled : false
+      });
+    });
+  }
+  // exact time first, then nearest; trains starting at the station before ones calling there
+  found.sort((a, b) => a.gap - b.gap || (b.startsHere - a.startsHere) || a.dep.localeCompare(b.dep));
+  const exact = found.filter((f) => f.gap === 0);
+  return { date, time: hhmmOf(want), exact: exact.length, trains: (exact.length ? exact : found).slice(0, 12).map(({ gap, ...f }) => f) };
+}
+
+// A train's page from the timetable alone, for a train that isn't running (yet, or any more)
+export function scheduleOnly(nat, id, trainDetail) {
+  const [, uid, date] = String(id).split(':');
+  const s = (nat.tt.byDate.get(date) || new Map()).get(uid);
+  if (!s) return { error: 'That train isn\'t in today\'s timetable.' };
+  const running = [...nat.trains.values()].find((t) => t.sched === s);
+  if (running) return { redirect: running.id };
+  const d = trainDetail(nat.tt, { id, code: s.headcode, sched: s, reports: {}, delay: null });
+  d.mode = 'live';
+  d.liveNote = 'From the timetable. There are no live reports for this train right now (not started yet, or it has finished).';
+  return d;
+}

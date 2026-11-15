@@ -80,6 +80,12 @@ export async function routeTrains(lines) {
   const r = await get('/api/route-trains?r=' + lines.map(([id, crs]) => `${encodeURIComponent(id)}:${crs.join('-')}`).join(';'));
   return r && r.routes ? r : null;
 }
+// "the 17:34 from Glasgow": today's trains booked from these stations at (or near) that time
+export async function findTrain(crs, time) {
+  await ready;
+  if (mode !== 'server') return { error: 'Finding a train needs the live feed.' };
+  return get(`/api/find-train?crs=${crs.join(',')}&time=${encodeURIComponent(time)}`);
+}
 export async function delays() {
   await ready;
   if (mode !== 'server') return null;
