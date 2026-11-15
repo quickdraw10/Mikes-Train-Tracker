@@ -488,6 +488,50 @@ function platformsHTML(p) {
     <p class="credit">${esc(p.credit || '')}</p>`;
 }
 
+// The train itself: a coach-by-coach picture from National Rail's formation data (class, toilets
+// and whether they work, how busy each coach is), or just the coach count if that's all that's
+// published. Plus how the timetable says it's timed and what's on board.
+const CLASS_NAMES = { '390': 'Pendolino', '800': 'Azuma / IET', '801': 'Azuma / IET', '802': 'Azuma / IET / Nova 1', '805': 'Evero', '807': 'Evero', '810': 'Aurora',
+  '395': 'Javelin', '91': 'InterCity 225', '43': 'HST', '220': 'Voyager', '221': 'Super Voyager', '222': 'Meridian', '397': 'Nova 2', '345': 'Elizabeth line' };
+const CATERING = { C: 'buffet', F: 'restaurant for first class', H: 'hot food', M: 'meal for first class', R: 'restaurant', T: 'trolley' };
+function trainInfoHTML(d) {
+  const tm = d.timing || {}, ob = d.onboard || {};
+  const kind = { EMU: 'electric unit', DMU: 'diesel unit', 'D': 'diesel loco', E: 'electric loco', ED: 'electro-diesel', HST: 'HST', DEM: 'diesel-electric unit', EML: 'electric loco' }[tm.power] || tm.power;
+  const cls = tm.load && /^\d{2,3}/.exec(tm.load) ? /^\d{2,3}/.exec(tm.load)[0] : null;
+  const timed = tm.power || tm.load ? `Timed as ${cls ? 'Class ' + cls + (CLASS_NAMES[cls] ? ' (' + CLASS_NAMES[cls] + ')' : '') + ' ' : ''}${kind || ''}${tm.speed ? ' at ' + tm.speed + ' mph' : ''}` : null;
+  const extras = [ob.firstClass === true ? 'First & Standard' : ob.firstClass === false ? 'Standard only' : null,
+    ob.catering ? [...ob.catering].map((c) => CATERING[c]).filter(Boolean).join(', ').replace(/^./, (x) => x.toUpperCase()) : null,
+    ob.reservations === 'A' ? 'Reservations compulsory' : ob.reservations === 'R' ? 'Reservations recommended' : ob.reservations === 'S' ? 'Reservations possible' : null,
+    ob.sleepers ? 'Sleeper' : null].filter(Boolean);
+  const f = d.formation;
+  let pic = '';
+  const n = f ? f.coaches.length : d.length || 0;
+  if (n) {
+    const W = 1000, cw = Math.min(110, (W - 20) / n), h = 46, y = 26, H = f ? 118 : 80;
+    let g = '';
+    for (let i = 0; i < n; i++) {
+      const c = f ? f.coaches[i] : {};
+      const x = 10 + i * cw, w = cw - 6;
+      const first = i === 0, last = i === n - 1;
+      const r = first || last ? 18 : 6;
+      const fill = c.cls === 'first' ? 'tr-first' : c.cls === 'mixed' ? 'tr-mixed' : 'tr-std';
+      g += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" class="tr-coach ${fill}"/>`;
+      // windows
+      g += `<rect x="${x + 8}" y="${y + 10}" width="${w - 16}" height="10" rx="3" class="tr-win"/>`;
+      // how busy (operator-reported), as a bar along the bottom
+      if (c.loading != null) g += `<rect x="${x + 6}" y="${y + h - 9}" width="${w - 12}" height="5" rx="2" class="tr-loadbg"/><rect x="${x + 6}" y="${y + h - 9}" width="${Math.max(2, (w - 12) * c.loading / 100)}" height="5" rx="2" class="tr-load ${c.loading >= 70 ? 'busy' : c.loading >= 40 ? 'some' : 'quiet'}"/>`;
+      if (c.number) g += `<text x="${x + w / 2}" y="${y - 8}" class="tr-num">${esc(c.number)}</text>`;
+      if (c.cls === 'first' || c.cls === 'mixed') g += `<text x="${x + w / 2}" y="${y + h - 14}" class="tr-cls">${c.cls === 'first' ? '1st' : '1st/Std'}</text>`;
+      if (c.toilet && c.toilet.kind && c.toilet.kind !== 'none') g += `<text x="${x + w / 2}" y="${y + h + 26}" class="tr-wc${c.toilet.working ? '' : ' out'}">${c.toilet.kind === 'accessible' ? '♿ WC' : 'WC'}</text>${c.toilet.working ? '' : `<line x1="${x + w / 2 - 16}" y1="${y + h + 28}" x2="${x + w / 2 + 16}" y2="${y + h + 12}" class="tr-out"/>`}`;
+    }
+    pic = `<div class="tr-wrap"><svg class="tr" viewBox="0 0 ${W} ${H}" role="img" aria-label="${n} coaches">${g}</svg></div>
+      ${f ? `<div class="legend tr-legend"><span><i class="tr-k first"></i>First</span><span><i class="tr-k std"></i>Standard</span>${f.coaches.some((c) => c.loading != null) ? '<span><i class="tr-k quiet"></i>Quiet</span><span><i class="tr-k some"></i>Busy</span><span><i class="tr-k busy"></i>Very busy</span>' : ''}</div>
+      <p class="note">Coaches in the order National Rail publishes them.${f.coaches.some((c) => c.toilet && !c.toilet.working) ? ' A crossed-out WC is reported out of order.' : ''}</p>` : `<p class="note">${n} coaches. National Rail hasn't published the coach-by-coach layout for this train.</p>`}`;
+  }
+  if (!timed && !extras.length && !pic) return '';
+  return `<section class="trinfo">${timed ? `<div class="tr-timed">${esc(timed)}</div>` : ''}${extras.length ? `<div class="tr-extras">${extras.map((x) => `<span>${esc(x)}</span>`).join('')}</div>` : ''}${pic}</section>`;
+}
+
 // Detailed view: every timing point the train is booked through (stations, junctions, passing
 // points) with the working timetable (half minutes as ½), platform and line, and each actual time
 // from TRUST with how it was reported: automatically by the signalling, or keyed in by staff
@@ -496,17 +540,18 @@ function detailHTML(points) {
   const src = (x) => (x === 'MANUAL' ? '<em class="src man" title="Keyed in by staff">manual</em>' : x === 'AUTOMATIC' ? '<em class="src auto" title="Reported automatically by the signalling">auto</em>' : '');
   const rows = points.map((p) => {
     const kind = p.kind === 'pass' ? 'passes' : p.kind === 'origin' ? 'starts' : p.kind === 'dest' ? 'ends' : p.kind === 'stop' ? 'stops' : 'calls (not public)';
-    const wtt = p.kind === 'pass' ? p.wtt.pass : [p.wtt.arr, p.wtt.dep].filter(Boolean).join(' – ');
-    const act = p.actual ? [p.actual.arr ? `${esc(p.actual.arr)}${src(p.actual.srcArr)}` : null, p.actual.dep ? `${esc(p.actual.dep)}${src(p.actual.srcDep)}` : null].filter(Boolean).join(' – ') : '';
+    const wtt = p.kind === 'pass' ? 'pass ' + p.wtt.pass : [p.wtt.arr, p.wtt.dep].filter(Boolean).join('<br>');
+    const pub = [p.pub.arr, p.pub.dep].filter(Boolean).join('<br>');
+    const act = p.actual ? [p.actual.arr ? `${esc(p.actual.arr)}${src(p.actual.srcArr)}` : null, p.actual.dep ? `${esc(p.actual.dep)}${src(p.actual.srcDep)}` : null].filter(Boolean).join('<br>') : '';
     const late = typeof p.late === 'number' ? `<small class="c-${bandOf(p.late)}">${p.late >= 1 ? '+' + p.late : p.late <= -1 ? -p.late + ' early' : 'on time'}</small>` : '';
     const where = [p.platform ? 'Plat ' + esc(p.platform) : null, p.line ? 'Line ' + esc(p.line) : null].filter(Boolean).join(' · ');
     // stations open their board; junctions and other timing points open their location board
     const nameEl = p.crs && BY_CRS.has(p.crs) ? `<button class="sn-link" data-act="stn" data-arg="${esc(p.crs)}">${esc(p.name)}</button>`
       : p.tiploc ? `<button class="sn-link" data-act="loc" data-arg="${esc(p.tiploc)}">${esc(p.name)}</button>` : esc(p.name);
-    return `<div class="dp k-${p.kind}${p.passed ? ' reached' : ''}"><span class="dn">${nameEl}<small>${kind}${where ? ' · ' + where : ''}</small></span><span class="dw">${esc(wtt || '')}</span><span class="da">${act || (p.passed ? '<small class="c-none">no report</small>' : '')}${late}</span></div>`;
+    return `<div class="dp k-${p.kind}${p.passed ? ' reached' : ''}"><span class="dn">${nameEl}<small>${kind}${where ? ' · ' + where : ''}</small></span><span class="dpub">${pub}</span><span class="dw">${wtt || ''}</span><span class="da">${act || (p.passed ? '<small class="c-none">no report</small>' : '')}${late}</span></div>`;
   }).join('');
-  return `<div class="dhead"><span>Location</span><span>Booked (WTT)</span><span>Actual</span></div><div class="dpoints">${rows}</div>
-    <p class="note">Every timing point in the working timetable. Actual times are Network Rail's reports: <em class="src auto">auto</em> from the signalling, <em class="src man">manual</em> keyed in by staff.</p>`;
+  return `<div class="dhead"><span>Location</span><span>Public</span><span>WTT</span><span>Actual</span></div><div class="dpoints">${rows}</div>
+    <p class="note">Every timing point in the working timetable. Public: the times in the public timetable. WTT: the working timetable the signallers use (½ = half a minute). Actual times are Network Rail's reports: <em class="src auto">auto</em> from the signalling, <em class="src man">manual</em> keyed in by staff.</p>`;
 }
 
 export async function trainSheet(t) {
@@ -577,7 +622,7 @@ export async function trainSheet(t) {
       ${next}
       ${last ? `<p class="lastseen">${esc(last.event || 'Seen')} ${esc(last.name)}${last.at ? ' at ' + hhmm(last.at) : ''}</p>` : ''}
       ${extras.map((x) => `<p class="lastseen">${x}</p>`).join('')}
-      <div class="sheet-body">${!d ? '<div class="empty">Loading stops…</div>' : views + stops + (view === 'journey' ? toggle : '') + source}</div>
+      <div class="sheet-body">${!d ? '<div class="empty">Loading stops…</div>' : trainInfoHTML(d) + views + stops + (view === 'journey' ? toggle : '') + source}</div>
       <div class="sheet-actions">${t.id ? '<button data-act="onmap">Show on map</button>' : ''}${d && d.stops && routeFromStops(d.stops) ? '<button data-act="route">Make this my route</button>' : ''}</div>`;
   };
   const load = async () => {

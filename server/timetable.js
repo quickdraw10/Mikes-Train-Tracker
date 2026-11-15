@@ -65,7 +65,10 @@ function compact(rec) {
   }));
   return {
     uid: rec.CIF_train_uid, stp: rec.CIF_stp_indicator, atoc: rec.atoc_code || null,
-    headcode: seg.signalling_id || null, cat: seg.CIF_train_category || null, locs
+    headcode: seg.signalling_id || null, cat: seg.CIF_train_category || null, locs,
+    // how the train is timed (e.g. EMU, class 390, 125 mph) and what's on board, from the timetable
+    power: seg.CIF_power_type || null, load: (seg.CIF_timing_load || '').trim() || null, speed: Number(seg.CIF_speed) || null,
+    tclass: seg.CIF_train_class || null, catering: seg.CIF_catering_code || null, resv: seg.CIF_reservations || null, sleepers: seg.CIF_sleepers || null
   };
 }
 
@@ -204,6 +207,9 @@ export function trainDetail(tt, t) {
   out.matched = true;
   out.operator = OPERATORS[s.atoc] || out.operator || null;
   out.passenger = isPassenger(s);
+  // "Timed as Class 390 EMU at 125 mph": the timing the path was planned for (not a guarantee of the actual unit)
+  out.timing = { power: s.power || null, load: s.load || null, speed: s.speed || null };
+  out.onboard = { firstClass: s.tclass === 'B' || s.tclass === ' ' ? true : s.tclass === 'S' ? false : null, catering: s.catering || null, reservations: s.resv || null, sleepers: s.sleepers || null };
   out.origin = nameOfTiploc(tt, s.locs[0].t);
   out.dest = nameOfTiploc(tt, s.locs[s.locs.length - 1].t);
 

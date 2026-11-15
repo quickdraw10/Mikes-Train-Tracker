@@ -115,7 +115,7 @@ export async function serviceDetail(crs, type, id, station) {
       const ahead = live.stops.map((x) => ({ ...x, state: x.actual && x !== live.stops[0] ? 'passed' : 'due' }));
       const stops = [...passed, ...ahead];
       return { mode: 'live', source: 'darwin', code: live.headcode, uid: live.uid, operator: live.operator, operatorCode: live.operatorCode,
-        origin: live.origin, dest: live.dest, length: live.length, firstClass: live.firstClass, cancelled: live.cancelled, cancelReason: live.cancelReason, delayReason: live.delayReason,
+        origin: live.origin, dest: live.dest, length: live.length, firstClass: live.firstClass, formation: live.formation, cancelled: live.cancelled, cancelReason: live.cancelReason, delayReason: live.delayReason,
         stops, next: ahead.find((x) => x.state === 'due' && !x.pass && !x.cancelled) || null, matched: true };
     }
   }

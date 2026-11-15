@@ -93,6 +93,7 @@ export function serviceToLive(svc, boardStation) {
     source: 'darwin',
     rid: svc.rid || null, uid: svc.uid || null, headcode: svc.trainid || svc.trainId || null,
     firstClass: firstClassOf(svc),
+    formation: formationOf(svc),
     operator: svc.operator || null, operatorCode: svc.operatorCode || null, length: Number(svc.length) || null,
     cancelled: Boolean(svc.isCancelled), cancelReason: textOf(svc.cancelReason, 'canc'), delayReason: textOf(svc.delayReason, 'late'),
     origin: names(svc.origin), dest: names(svc.destination),
@@ -167,6 +168,28 @@ export function expectedOf(est, type, booked) {
 
 // Where first class is, from the train's formation: the coach numbers National Rail gives
 // (e.g. "First class: coaches A & B"). Null when the formation isn't published.
+// The train's coaches as National Rail publishes them (Darwin formation data): each coach's
+// number or letter, class, toilet (and whether it's working) and how busy it is (0-100) where
+// the operator reports loading. Null when the formation isn't published for this train.
+export function formationOf(svc) {
+  const coaches = list(svc && svc.formation && svc.formation.coaches);
+  if (!coaches.length) return null;
+  const toilet = (t) => {
+    const v = String((t && (t.value ?? t)) || '').toLowerCase();
+    return { kind: /accessible/.test(v) ? 'accessible' : /standard/.test(v) ? 'standard' : /none/.test(v) ? 'none' : null,
+      working: !(t && t.status && !/inservice/i.test(String(t.status))) };
+  };
+  return {
+    avgLoading: svc.formation.avgLoading != null && svc.formation.avgLoading !== '' ? Number(svc.formation.avgLoading) : null,
+    coaches: coaches.map((c) => ({
+      number: c.number || null,
+      cls: /first/i.test(c.coachClass || '') ? 'first' : /mixed/i.test(c.coachClass || '') ? 'mixed' : c.coachClass ? 'standard' : null,
+      toilet: toilet(c.toilet),
+      loading: c.loading != null && c.loading !== '' && Number.isFinite(Number(c.loading)) ? Number(c.loading) : null
+    }))
+  };
+}
+
 export function firstClassOf(svc) {
   const coaches = list(svc && svc.formation && svc.formation.coaches);
   if (!coaches.length) return null;
