@@ -407,10 +407,30 @@ function minsLate(booked, actual) {
 }
 
 // ---------- the train screen: from, to, next stop, on time, every stop ----------
+// Detailed view: every timing point the train is booked through (stations, junctions, passing
+// points) with the working timetable (half minutes as ½), platform and line, and each actual time
+// from TRUST with how it was reported: automatically by the signalling, or keyed in by staff
+// (a single manual report is worth checking against the next ones).
+function detailHTML(points) {
+  const src = (x) => (x === 'MANUAL' ? '<em class="src man" title="Keyed in by staff">manual</em>' : x === 'AUTOMATIC' ? '<em class="src auto" title="Reported automatically by the signalling">auto</em>' : '');
+  const rows = points.map((p) => {
+    const kind = p.kind === 'pass' ? 'passes' : p.kind === 'origin' ? 'starts' : p.kind === 'dest' ? 'ends' : p.kind === 'stop' ? 'stops' : 'calls (not public)';
+    const wtt = p.kind === 'pass' ? p.wtt.pass : [p.wtt.arr, p.wtt.dep].filter(Boolean).join(' – ');
+    const act = p.actual ? [p.actual.arr ? `${esc(p.actual.arr)}${src(p.actual.srcArr)}` : null, p.actual.dep ? `${esc(p.actual.dep)}${src(p.actual.srcDep)}` : null].filter(Boolean).join(' – ') : '';
+    const late = typeof p.late === 'number' ? `<small class="c-${bandOf(p.late)}">${p.late >= 1 ? '+' + p.late : p.late <= -1 ? -p.late + ' early' : 'on time'}</small>` : '';
+    const where = [p.platform ? 'Plat ' + esc(p.platform) : null, p.line ? 'Line ' + esc(p.line) : null].filter(Boolean).join(' · ');
+    const nameEl = p.crs && BY_CRS.has(p.crs) ? `<button class="sn-link" data-act="stn" data-arg="${esc(p.crs)}">${esc(p.name)}</button>` : esc(p.name);
+    return `<div class="dp k-${p.kind}${p.passed ? ' reached' : ''}"><span class="dn">${nameEl}<small>${kind}${where ? ' · ' + where : ''}</small></span><span class="dw">${esc(wtt || '')}</span><span class="da">${act || (p.passed ? '<small class="c-none">no report</small>' : '')}${late}</span></div>`;
+  }).join('');
+  return `<div class="dhead"><span>Location</span><span>Booked (WTT)</span><span>Actual</span></div><div class="dpoints">${rows}</div>
+    <p class="note">Every timing point in the working timetable. Actual times are Network Rail's reports: <em class="src auto">auto</em> from the signalling, <em class="src man">manual</em> keyed in by staff.</p>`;
+}
+
 export async function trainSheet(t) {
   clearInterval(sheetTimer);
   let d = null;
   let detailed = false;
+  let view = 'journey'; // 'journey' (stops as a strip) or 'detail' (every timing point, working times, sources)
   const html = () => {
     const delay = d && d.delay !== undefined ? d.delay : t.delay, cancelled = d && d.cancelled !== undefined ? d.cancelled : t.cancelled;
     const bd = bandOf(delay, cancelled);
@@ -429,8 +449,16 @@ export async function trainSheet(t) {
     const last = (d && d.last) || (t.last ? { name: t.last, event: t.lastEvent, at: t.lastAt } : null);
     const shown = d && d.stops ? d.stops.filter((s) => detailed || !s.pass) : [];
     const passCount = d && d.stops ? d.stops.filter((s) => s.pass).length : 0;
-    const stops = shown.length ? `<div class="stops">${shown.map((s) => {
+    // lateness at each stop it has reached (TRUST's figure there), to show where time was lost or gained
+    let prevLate = null;
+    const lateAt = shown.map((s) => (s.state === 'passed' && typeof s.late === 'number' ? s.late : null));
+    const stops = shown.length && view === 'journey' ? `<div class="stops strip">${shown.map((s, si) => {
       const isNext = d.next && s === d.next;
+      const lt = lateAt[si];
+      let delta = '';
+      if (lt != null && prevLate != null && Math.abs(lt - prevLate) >= 2) delta = lt > prevLate ? `<span class="dchip lost">lost ${lt - prevLate}</span>` : `<span class="dchip gain">gained ${prevLate - lt}</span>`;
+      if (lt != null) prevLate = lt;
+      const seg = s.state !== 'passed' ? 'due' : lt == null ? 'none' : bandOf(lt);
       const cls = [s.state === 'passed' ? 'passed' : '', isNext ? 'next' : '', s.cancelled ? 'cancelled' : '', s.pass ? 'pass' : ''].join(' ');
       const actual = typeof s.actual === 'number' ? hhmm(s.actual) : s.actual;
       let right;
@@ -446,8 +474,10 @@ export async function trainSheet(t) {
       else right = s.pass ? 'pass' : 'On time';
       const plat = s.platform ? `Plat ${esc(s.platform)}` : s.hiddenPlatform ? `Plat ${esc(s.hiddenPlatform)} <em>(not shown to public)</em>` : '';
       const booked = s.pass ? (s.working || s.booked || '') : (s.booked || '');
-      return `<div class="stop ${cls}"><i></i><span class="sn">${esc(s.name)}${s.pass ? '<small>passes</small>' : plat ? `<small>${plat}</small>` : ''}</span><span class="sb">${esc(booked)}</span><span class="sa">${right}</span></div>`;
-    }).join('')}</div>` : (d && d.note ? `<p class="note">${esc(d.note)}</p>` : '');
+      const nameEl = s.crs && BY_CRS.has(s.crs) ? `<button class="sn-link" data-act="stn" data-arg="${esc(s.crs)}">${esc(s.name)}</button>` : esc(s.name);
+      return `<div class="stop ${cls} seg-${seg}"><i></i><span class="sn">${nameEl}${s.pass ? '<small>passes</small>' : plat ? `<small>${plat}</small>` : ''}${delta}</span><span class="sb">${esc(booked)}</span><span class="sa">${right}</span></div>`;
+    }).join('')}</div>` : view === 'detail' && d && d.points ? detailHTML(d.points) : (d && d.note ? `<p class="note">${esc(d.note)}</p>` : '');
+    const views = d && d.points ? `<div class="segctl tview" role="tablist"><button role="tab" data-act="view" data-arg="journey" aria-selected="${view === 'journey'}">Journey</button><button role="tab" data-act="view" data-arg="detail" aria-selected="${view === 'detail'}">Detailed</button></div>` : '';
     const extras = d ? [
       d.length || d.firstClass ? esc([d.length ? d.length + ' coaches' : null, d.firstClass].filter(Boolean).join(' · ')) : null,
       d.cancelReason ? esc(d.cancelReason) : d.delayReason ? esc(d.delayReason) : null
@@ -464,7 +494,7 @@ export async function trainSheet(t) {
       ${next}
       ${last ? `<p class="lastseen">${esc(last.event || 'Seen')} ${esc(last.name)}${last.at ? ' at ' + hhmm(last.at) : ''}</p>` : ''}
       ${extras.map((x) => `<p class="lastseen">${x}</p>`).join('')}
-      <div class="sheet-body">${!d ? '<div class="empty">Loading stops…</div>' : stops + toggle + source}</div>
+      <div class="sheet-body">${!d ? '<div class="empty">Loading stops…</div>' : views + stops + (view === 'journey' ? toggle : '') + source}</div>
       <div class="sheet-actions">${t.id ? '<button data-act="onmap">Show on map</button>' : ''}${d && d.stops && routeFromStops(d.stops) ? '<button data-act="route">Make this my route</button>' : ''}</div>`;
   };
   const load = async () => {
@@ -478,6 +508,8 @@ export async function trainSheet(t) {
   };
   openSheet(html(), {
     detail: () => { detailed = !detailed; updateSheet(html()); },
+    view: (v) => { view = v; updateSheet(html()); },
+    stn: (crs) => { const keep = t; stationSheet(crs, 'dep', () => trainSheet(keep)); },
     back: () => { if (t.back) t.back(); },
     onmap: () => { closeCustomSheet(); window.dispatchEvent(new CustomEvent('mtt:showtrain', { detail: { train: t } })); },
     route: () => {
@@ -533,7 +565,8 @@ function drawStations() {
   }
 }
 
-export async function stationSheet(crs, type = 'dep') {
+// back: optional, to return to where you came from (e.g. the train you tapped the station on)
+export async function stationSheet(crs, type = 'dep', back = null) {
   const st = BY_CRS.get(crs);
   if (!st) return;
   clearInterval(sheetTimer);
@@ -544,7 +577,7 @@ export async function stationSheet(crs, type = 'dep') {
   let data = null;
   const areas = loadList(AREAS_KEY);
   const saved = loadList(STATIONS_KEY);
-  const html = () => `
+  const html = () => `${back ? '<button class="back-link" data-act="back">‹ Back to the train</button>' : ''}
     <div class="st-head"><div><div class="meta">${lu ? esc((/\((Underground|DLR|Tram)\)$/.exec(st.name) || [, 'Underground'])[1]) : st.country === 'fr' ? 'France · SNCF' : st.country === 'ie' ? 'Ireland · Iarnród Éireann' : esc(crs)}</div><h2 id="sheet-title">${esc(lu ? luShort(st.name) : st.name)}</h2></div></div>
     ${lu ? luView().tabs : `<div class="segctl" role="tablist">
       <button role="tab" data-act="type" data-arg="dep" aria-selected="${current === 'dep'}">Departures</button>
@@ -563,10 +596,11 @@ export async function stationSheet(crs, type = 'dep') {
   }
   openSheet(html(), {
     type: (t) => { current = t; data = null; updateSheet(html()); load(); },
+    back: () => { if (back) back(); },
     bound: (b) => { bound = b; updateSheet(html()); },
     watch: () => { watchArea(st); updateSheet(html()); },
     // a train on the board: its own screen, with a way back to this board
-    svc: (id) => { const row = data && data.services && data.services.find((x) => x.id === id); if (row) trainSheet(boardTrain(row, crs, current, () => stationSheet(crs, current))); },
+    svc: (id) => { const row = data && data.services && data.services.find((x) => x.id === id); if (row) trainSheet(boardTrain(row, crs, current, () => stationSheet(crs, current, back))); },
     build: () => { closeCustomSheet(); window.dispatchEvent(new CustomEvent('mtt:build', { detail: { crs } })); },
     save: () => {
       const list = loadList(STATIONS_KEY);

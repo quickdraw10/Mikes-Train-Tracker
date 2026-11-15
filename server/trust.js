@@ -76,7 +76,7 @@ export function handleTrust(batch, raw, stanoxIndex, now = Date.now()) {
     }
     if (type !== '0003') continue;
 
-    const hits = stanoxIndex.get(b.loc_stanox);
+    const hits = stanoxIndex.get(b.loc_stanox) || stanoxIndex.get(String(Number(b.loc_stanox))) || stanoxIndex.get(String(b.loc_stanox).padStart(5, '0'));
     const t = raw.trains[code];
     // Only route stations here. Panel trains get their delay from the national
     // tracker, matched by headcode AND place (linkPanelTrains in national.js), because

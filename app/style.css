@@ -601,3 +601,26 @@ button.dl-row.link { cursor: pointer; }
 .find-time input { border: 0; background: transparent; color: var(--text); font: 600 17px var(--mono); padding: 10px 0; min-width: 0; }
 .find-go { padding: 0 20px; border: 0; border-radius: 12px; background: var(--navy); color: #FFFFFF; font: 700 15px var(--body); box-shadow: inset 0 0 0 1.5px var(--trim); cursor: pointer; }
 .find .gtime small { text-transform: lowercase; }
+/* train page: Journey / Detailed */
+.tview { margin: 0 0 10px; }
+.sn-link { border: 0; background: none; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 30%, transparent); text-underline-offset: 3px; }
+/* journey strip: the line into each stop it has reached is coloured by how late it was there */
+.stops.strip .stop::before { width: 5px; left: 9px; }
+.stops.strip .stop.passed.seg-ok::before, .stops.strip .stop.passed.seg-ok i { background: var(--ok); }
+.stops.strip .stop.passed.seg-mid::before, .stops.strip .stop.passed.seg-mid i { background: var(--mid); }
+.stops.strip .stop.passed.seg-bad::before, .stops.strip .stop.passed.seg-bad i { background: var(--bad); }
+.stops.strip .stop.passed.seg-none::before, .stops.strip .stop.passed.seg-none i { background: var(--none); }
+.dchip { align-self: flex-start; display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px; font: 700 11px var(--mono); vertical-align: 1px; }
+.dchip.lost { background: color-mix(in srgb, var(--bad) 22%, transparent); color: var(--bad); }
+.dchip.gain { background: color-mix(in srgb, var(--ok) 22%, transparent); color: var(--ok); }
+.dhead, .dp { display: grid; grid-template-columns: minmax(0, 1.4fr) 82px minmax(0, 1fr); gap: 8px; align-items: baseline; }
+.dhead { font: 600 10.5px var(--body); text-transform: uppercase; letter-spacing: 0.06em; color: var(--text2); padding: 0 0 6px; border-bottom: 1px solid var(--line); }
+.dp { padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.dp.k-pass { color: var(--text2); }
+.dp .dn small { display: block; font-size: 11px; color: var(--text2); }
+.dp .dw { font: 500 12.5px var(--mono); }
+.dp .da { font: 600 12.5px var(--mono); text-align: right; }
+.dp .da small { display: block; font: 600 11px var(--mono); }
+.src { font-style: normal; font: 600 9px var(--body); padding: 0 4px; margin-left: 3px; border-radius: 3px; vertical-align: 1px; text-transform: uppercase; letter-spacing: 0.04em; }
+.src.auto { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.src.man { background: color-mix(in srgb, var(--mid) 22%, transparent); color: var(--mid); }

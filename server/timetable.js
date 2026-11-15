@@ -25,6 +25,8 @@ export function mins(t) {
   if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
   return h * 60 + m + (t[4] === 'H' ? 0.5 : 0);
 }
+// working timetable times keep their half minutes: 438.5 -> "07:18½"
+export const wttOf = (m) => (m == null ? null : hhmmOf(m) + (m % 1 ? '½' : ''));
 export const hhmmOf = (m) => m == null ? null : String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(Math.floor(m % 60)).padStart(2, '0');
 
 export function londonDate(ms = Date.now()) {
@@ -58,7 +60,8 @@ function compact(rec) {
     t: (l.tiploc_code || '').trim(),
     arr: mins(l.arrival), dep: mins(l.departure), pass: mins(l.pass),
     parr: pub(l.public_arrival, l.arrival), pdep: pub(l.public_departure, l.departure),
-    plat: l.platform || null, type: l.location_type
+    plat: l.platform || null, type: l.location_type,
+    line: (l.line || '').trim() || null, path: (l.path || '').trim() || null
   }));
   return {
     uid: rec.CIF_train_uid, stp: rec.CIF_stp_indicator, atoc: rec.atoc_code || null,
@@ -149,7 +152,10 @@ export async function loadTimetable(tt, { user, pass, log = console.log, now = D
 
 // ---------- matching a live train to its schedule ----------
 
-const stanoxOf = (tt, tiploc) => (tt.tiplocs.get(tiploc) || {}).stanox || null;
+// STANOX codes are compared as numbers: the timetable and TRUST don't agree on leading zeros
+// (Edinburgh is 04303 in one and 4303 in the other), which matters most in Scotland
+export const normStanox = (x) => (x == null || x === '' ? null : String(Number(x)));
+const stanoxOf = (tt, tiploc) => normStanox((tt.tiplocs.get(tiploc) || {}).stanox);
 export const nameOfTiploc = (tt, tiploc) => (tt.tiplocs.get(tiploc) || {}).name || tiploc;
 
 // TRUST timestamps are London wall-clock written as if UTC, so the UTC fields read local time
@@ -171,7 +177,7 @@ export function matchByHeadcode(tt, headcode, stanox, plannedRaw) {
     for (const s of (tt.byHeadcode.get(d) || new Map()).get(headcode) || []) {
       const first = s.locs[0] ? (s.locs[0].dep ?? s.locs[0].arr ?? 0) : 0;
       for (const l of s.locs) {
-        if (stanoxOf(tt, l.t) !== stanox) continue;
+        if (stanoxOf(tt, l.t) !== normStanox(stanox)) continue;
         const sm = l.dep ?? l.pass ?? l.arr;
         if (sm == null) continue;
         // times after midnight on an overnight train belong to the next day
@@ -225,6 +231,24 @@ export function trainDetail(tt, t) {
     };
     out.stops.push(stop);
     if (!passed && !out.next && i > 0) out.next = stop;
+  });
+
+  // Every timing point, for the Detailed view and the journey strip: stations, junctions and passing
+  // points with the working timetable, public times, platform and line, and TRUST's actual times,
+  // lateness and how each was reported (automatic from the signalling, or keyed in manually).
+  const clock = (ms) => (ms ? new Date(ms).toLocaleTimeString('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hour12: false }) : null);
+  out.points = s.locs.map((l, i) => {
+    const sx = stanoxOf(tt, l.t);
+    const rep = sx && reported[sx];
+    const kind = i === 0 ? 'origin' : i === s.locs.length - 1 ? 'dest' : l.pass != null ? 'pass' : (l.parr != null || l.pdep != null) ? 'stop' : 'call';
+    return {
+      name: nameOfTiploc(tt, l.t), crs: (tt.tiplocs.get(l.t) || {}).crs || null, kind,
+      wtt: { arr: wttOf(l.arr), dep: wttOf(l.dep), pass: wttOf(l.pass) }, pub: { arr: hhmmOf(l.parr), dep: hhmmOf(l.pdep) },
+      platform: (rep && rep.platform) || l.plat || null, line: (rep && rep.line) || l.line || null, path: l.path || null,
+      actual: rep ? { arr: clock(rep.arr), dep: clock(rep.dep), srcArr: rep.srcArr || null, srcDep: rep.srcDep || null } : null,
+      late: rep ? (rep.lateDep ?? rep.lateArr ?? null) : null,
+      passed: i <= lastIdx
+    };
   });
   return out;
 }

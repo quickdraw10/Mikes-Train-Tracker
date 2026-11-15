@@ -8,7 +8,15 @@ import { BY_CRS, km, inBox } from '../app/geo.js';
 import { band } from '../app/model.js';
 import { headcodeOf, delayOf, trustTime } from './trust.js';
 import { staffBoard, staffEnabled, findService, serviceToLive } from './staff.js';
-import { byUid, matchByHeadcode, nameOfTiploc, trainDetail, wallDate, OPERATORS, hhmmOf } from './timetable.js';
+import { byUid, matchByHeadcode, nameOfTiploc, trainDetail, wallDate, OPERATORS, hhmmOf, normStanox } from './timetable.js';
+
+// station code for a STANOX, whatever leading zeros either side uses
+let sxNorm = null, sxFrom = null;
+function crsAt(nat, stanox) {
+  const m = nat.stanoxCrs || {};
+  if (sxFrom !== m) { sxNorm = new Map(Object.entries(m).map(([k, v]) => [normStanox(k), v])); sxFrom = m; }
+  return sxNorm.get(normStanox(stanox)) || null;
+}
 
 const TOCS = { '84': 'South Western Railway', '88': 'GTR' };
 const LOG_MAX = 20000;
@@ -72,9 +80,13 @@ export function handleNational(batch, nat, stanoxCrs, now = Date.now()) {
     t.delay = delayOf(b);
     if (b.loc_stanox) {
       const at = trustTime(b.actual_timestamp) || now;
-      const rp = (t.reports[b.loc_stanox] ||= {});
+      const rp = (t.reports[normStanox(b.loc_stanox)] ||= {});
       const dep = b.event_type === 'DEPARTURE';
       rp[dep ? 'dep' : 'arr'] = at;
+      // how TRUST got this report: AUTOMATIC (from the signalling) or MANUAL (keyed in by staff)
+      rp[dep ? 'srcDep' : 'srcArr'] = b.event_source || null;
+      if (b.platform && b.platform.trim()) rp.platform = b.platform.trim();
+      if (b.line_ind && b.line_ind.trim()) rp.line = b.line_ind.trim();
       // TRUST's own lateness at this point (minutes; negative = early)
       rp[dep ? 'lateDep' : 'lateArr'] = t.delay;
       rp.at = at;
@@ -84,13 +96,13 @@ export function handleNational(batch, nat, stanoxCrs, now = Date.now()) {
     if (b.toc_id) t.toc = TOCS[b.toc_id] || null;
     t.updated = now;
     t.terminated = b.train_terminated === 'true';
-    const crs = stanoxCrs[b.loc_stanox];
+    const crs = crsAt(nat, b.loc_stanox);
     const stn = crs && BY_CRS.get(crs);
     if (stn) {
       const departed = b.event_type === 'DEPARTURE';
       const at = trustTime(b.actual_timestamp) || now;
       t.at = stn; t.event = departed ? 'Departed' : t.terminated ? 'Arrived (terminates)' : 'Arrived'; t.eventAt = at;
-      const nextCrs = stanoxCrs[b.next_report_stanox];
+      const nextCrs = crsAt(nat, b.next_report_stanox);
       t.next = departed && nextCrs ? BY_CRS.get(nextCrs) || null : null;
       t.runMins = Number(b.next_report_run_time) || null;
       nat.log.push({ at, crs: stn.crs, name: stn.name, lat: stn.lat, lon: stn.lon, code: t.code, id: t.id, toc: t.toc, event: t.event, delay: t.delay, dest: t.destName || null });
@@ -258,10 +270,9 @@ export function linkPanelTrains(nat, raw, panels, maxKm = 60) {
 // Timing points that aren't stations have no map position and are left out; nothing
 // is filled in between reports.
 export function pathOf(nat, t) {
-  const sx = nat.stanoxCrs || {};
   const pts = [];
   for (const [stanox, r] of Object.entries(t.reports || {})) {
-    const st = BY_CRS.get(sx[stanox]);
+    const st = BY_CRS.get(crsAt(nat, stanox));
     if (st) pts.push({ name: st.name, crs: st.crs, lat: st.lat, lon: st.lon, at: r.at, arr: r.arr || null, dep: r.dep || null });
   }
   return pts.sort((a, b) => a.at - b.at);
