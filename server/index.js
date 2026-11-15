@@ -401,10 +401,10 @@ const server = http.createServer((req, res) => {
     if (!natState || !natState.tt || !natState.tt.loadedAt) return json(200, { results: [], note: 'Timetable still loading (or demo mode)' });
     return json(200, { results: searchLocations(natState.tt, url.searchParams.get('q')) });
   }
-  const lm = /^\/api\/location\/([A-Z0-9]{2,8})$/.exec(url.pathname.toUpperCase());
+  const lm = /^\/api\/location\/([A-Za-z0-9]{2,8})$/.exec(url.pathname);
   if (lm) {
     if (!natState) return json(200, { error: 'Location boards need the live feed (not in demo mode).' });
-    return json(200, locationBoard(natState, lm[1]));
+    return json(200, locationBoard(natState, lm[1].toUpperCase()));
   }
   if (url.pathname === '/api/find-train') {
     // ?crs=GLC,GLQ&time=17:34 -> today's passenger trains booked to leave there at (or near) that time
