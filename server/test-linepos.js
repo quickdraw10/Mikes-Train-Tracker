@@ -65,4 +65,14 @@ test('a train that never touches the route\'s stations is not counted, even on s
   assert.equal(trainsOnLine(nat, LINE, band).length, 0);
 });
 
+test('a station\'s second timing point with no code of its own still counts (via CORPUS)', () => {
+  const tl = new Map(tiplocs);
+  tl.set('ALNMTHM', { crs: null, stanox: '33', name: 'Alnmouth main line' });
+  const fast = { uid: 'F', locs: ['NWCSTLE', 'MRPTH', 'ALNMTHM', 'CHTHILL', 'BRWK'].map((t) => ({ t })) };
+  const tt3 = { loadedAt: 3, tiplocs: tl, tiplocCrs: { ALNMTHM: 'ALM' }, byDate: new Map([['d', new Map([['F', fast]])]]) };
+  const c = corridor(tt3, LINE);
+  assert.equal(c.pos.get('ALNMTHM'), 2);
+  assert.ok(c.direct.get(2) >= 1, 'Alnmouth–Berwick has a train booked straight through');
+});
+
 console.log(`\n${passed} line placement tests passed`);

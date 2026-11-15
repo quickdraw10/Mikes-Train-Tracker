@@ -19,7 +19,7 @@ import { createSim } from '../app/sim.js';
 import { handleTd } from './td.js';
 import { handleSClass } from './sclass.js';
 import { handleTrust, buildStanoxIndex, prune } from './trust.js';
-import { applyStanox, loadStanoxCrs, downloadCorpus, haveCorpus } from './corpus.js';
+import { applyStanox, loadStanoxCrs, loadTiplocCrs, downloadCorpus, haveCorpus } from './corpus.js';
 import { createNational, handleNational, trainsIn, movesNear, pruneNational, attachAll, liveDetailOf, linkPanelTrains, pathOf } from './national.js';
 import { staffBoard, loadReasons, reasonsStatus } from './staff.js';
 import { createTimetable, loadTimetable } from './timetable.js';
@@ -64,6 +64,8 @@ if (live) {
   const stanoxIndex = buildStanoxIndex();
   const stanoxCrs = loadStanoxCrs();
   const tt = createTimetable();
+  tt.stanoxCrs = stanoxCrs; // so line placement can find a station for timing points without a station code
+  tt.tiplocCrs = loadTiplocCrs();
   const nat = createNational(tt);
   natState = nat;
 

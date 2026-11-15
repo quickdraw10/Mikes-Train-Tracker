@@ -43,6 +43,20 @@ export function stanoxToCrs(corpus) {
   return out;
 }
 
+// timing point (TIPLOC) -> station code, for every timing point CORPUS links to a station
+export const TIPLOC_FILE = path.join(here, 'data', 'tiploc-crs.json');
+export function tiplocToCrs(corpus) {
+  const out = {};
+  for (const row of corpus.TIPLOCDATA || []) {
+    const crs = (row['3ALPHA'] || '').trim(), tip = (row.TIPLOC || '').trim();
+    if (crs && tip) out[tip] = crs;
+  }
+  return out;
+}
+export function loadTiplocCrs() {
+  try { return fs.existsSync(TIPLOC_FILE) ? JSON.parse(fs.readFileSync(TIPLOC_FILE, 'utf8')) : {}; } catch { return {}; }
+}
+
 export function loadStanoxCrs(log = console.log) {
   if (!fs.existsSync(ALL_FILE)) { log('[corpus] no data/stanox-crs.json yet — the map will stay empty in live mode. Run: npm run corpus'); return {}; }
   return JSON.parse(fs.readFileSync(ALL_FILE, 'utf8'));
@@ -77,11 +91,12 @@ export async function downloadCorpus(user, pass, log = console.log) {
   // Every STANOX that is a passenger station, for placing trains on the map
   const all = stanoxToCrs(corpus);
   fs.writeFileSync(ALL_FILE, JSON.stringify(all));
+  fs.writeFileSync(TIPLOC_FILE, JSON.stringify(tiplocToCrs(corpus)));
   log('[corpus] saved', Object.keys(all).length, 'station STANOX codes');
   return true;
 }
 
-export const haveCorpus = () => fs.existsSync(ALL_FILE) && fs.existsSync(FILE);
+export const haveCorpus = () => fs.existsSync(ALL_FILE) && fs.existsSync(FILE) && fs.existsSync(TIPLOC_FILE);
 
 async function main() {
   const { NR_USER: user, NR_PASS: pass } = process.env;

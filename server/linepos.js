@@ -13,14 +13,29 @@
 
 const corridors = new Map(); // cache: line stations + timetable load time -> corridor
 
+// A timing point's station code. Network Rail's timetable often puts the code on only one of a big
+// station's timing points (Clapham Junction has several), so fall back on the station that the
+// timing point's STANOX belongs to, from CORPUS.
+let normStanoxCrs = null, normFrom = null;
+function crsOfTip(tt, tip) {
+  const t = tt.tiplocs.get(tip);
+  if (!t) return null;
+  if (t.crs) return t.crs;
+  if (tt.tiplocCrs && tt.tiplocCrs[tip]) return tt.tiplocCrs[tip]; // CORPUS links this timing point to a station
+  if (!tt.stanoxCrs || t.stanox == null) return null;
+  if (normFrom !== tt.stanoxCrs) { normStanoxCrs = new Map(Object.entries(tt.stanoxCrs).map(([k, v]) => [String(Number(k)), v])); normFrom = tt.stanoxCrs; }
+  return normStanoxCrs.get(String(Number(t.stanox))) || null;
+}
+
 // station code -> the schedules that call at or pass it (built once per timetable load)
 let stIdx = null, stIdxAt = -1;
 function stationIndex(tt) {
-  if (stIdx && stIdxAt === tt.loadedAt) return stIdx;
-  stIdx = new Map(); stIdxAt = tt.loadedAt;
+  const stamp = tt.loadedAt + ':' + (tt.stanoxCrs ? Object.keys(tt.stanoxCrs).length : 0);
+  if (stIdx && stIdxAt === stamp) return stIdx;
+  stIdx = new Map(); stIdxAt = stamp;
   for (const day of tt.byDate.values()) for (const s of day.values()) {
     for (const l of s.locs) {
-      const c = (tt.tiplocs.get(l.t) || {}).crs;
+      const c = crsOfTip(tt, l.t);
       if (!c) continue;
       let list = stIdx.get(c);
       if (!list) stIdx.set(c, (list = []));
@@ -32,12 +47,12 @@ function stationIndex(tt) {
 
 // timing point -> position along the line (station i = i; between i and i+1 = i + fraction)
 export function corridor(tt, crsList) {
-  const key = crsList.join(' ') + '@' + (tt.loadedAt || 0);
+  const key = crsList.join(' ') + '@' + (tt.loadedAt || 0) + ':' + (tt.stanoxCrs ? Object.keys(tt.stanoxCrs).length : 0);
   const hit = corridors.get(key);
   if (hit) return hit;
   const lineIdx = new Map(crsList.map((c, i) => [c, i]));
   const pos = new Map();
-  const crsOf = (tip) => (tt.tiplocs.get(tip) || {}).crs || null;
+  const crsOf = (tip) => crsOfTip(tt, tip);
   // only the schedules that call at or pass one of the line's stations
   const idx = stationIndex(tt);
   const touching = new Set();
@@ -91,7 +106,7 @@ export function corridor(tt, crsList) {
   // and by station code, for trains we have no schedule for
   const byCrs = new Map();
   for (const [tip, p] of pos) { const c = crsOf(tip); if (c && !byCrs.has(c)) byCrs.set(c, p); }
-  const keyTips = new Set([...tt.tiplocs.entries()].filter(([, v]) => v.crs && lineIdx.has(v.crs)).map(([k]) => k));
+  const keyTips = new Set([...tt.tiplocs.keys()].filter((k) => lineIdx.has(crsOfTip(tt, k))));
   const out = { pos, byCrs, keyTips, direct, n: crsList.length };
   corridors.set(key, out);
   if (corridors.size > 200) corridors.delete(corridors.keys().next().value);
@@ -166,7 +181,7 @@ export function lineDebug(nat, crsList) {
     if (li >= 0) reported++; else if (!sample && Object.keys(rep).length) sample = { reportKeys: Object.keys(t.reports || {}).slice(0, 5), schedStanox: t.sched.locs.slice(0, 5).map((l) => (tt.tiplocs.get(l.t) || {}).stanox ?? null) };
     if (li >= 0 && cor.pos.has(t.sched.locs[li].t)) onLine++;
   }
-  const keys = crsList.map((c) => ({ crs: c, tiplocs: [...tt.tiplocs.entries()].filter(([, v]) => v.crs === c).map(([k, v]) => k + ':' + v.stanox) }));
+  const keys = crsList.map((c) => ({ crs: c, tiplocs: [...tt.tiplocs.entries()].filter(([k]) => crsOfTip(tt, k) === c).map(([k, v]) => k + ':' + v.stanox) }));
   return { timetableSchedules: tt.schedules, timingPointsOnLine: cor.pos.size, lineStations: keys, trains, withSched, reportedOnSchedule: reported, onLine, unmatchedSample: sample };
 }
 
