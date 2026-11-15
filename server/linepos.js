@@ -182,7 +182,21 @@ export function lineDebug(nat, crsList) {
     if (li >= 0 && cor.pos.has(t.sched.locs[li].t)) onLine++;
   }
   const keys = crsList.map((c) => ({ crs: c, tiplocs: [...tt.tiplocs.entries()].filter(([k]) => crsOfTip(tt, k) === c).map(([k, v]) => k + ':' + v.stanox) }));
-  return { timetableSchedules: tt.schedules, timingPointsOnLine: cor.pos.size, lineStations: keys, trains, withSched, reportedOnSchedule: reported, onLine, unmatchedSample: sample };
+  // for each line station, a real schedule that stops or passes there: the timing points either side
+  // of it, so we can see which codes trains actually use (e.g. a station's other platforms)
+  const idx = stationIndex(tt);
+  const around = crsList.map((c) => {
+    const sch = (idx.get(c) || [])[0];
+    if (!sch) return { crs: c, schedule: null };
+    const i = sch.locs.findIndex((l) => crsOfTip(tt, l.t) === c);
+    return { crs: c, schedule: sch.headcode, points: sch.locs.slice(Math.max(0, i - 4), i + 5).map((l) => `${l.t}${crsOfTip(tt, l.t) ? '=' + crsOfTip(tt, l.t) : ''}`).join(' ') };
+  });
+  // and timing points whose name starts with each station's name but aren't linked to its code
+  const named = crsList.map((c) => {
+    const nm = String((tt.tiplocs.get([...tt.tiplocs.keys()].find((k) => crsOfTip(tt, k) === c)) || {}).name || '').toUpperCase().split(/\s+/)[0];
+    return { crs: c, unlinked: nm.length >= 4 ? [...tt.tiplocs.entries()].filter(([k, v]) => String(v.name || '').toUpperCase().startsWith(nm) && crsOfTip(tt, k) !== c).slice(0, 8).map(([k, v]) => `${k}:${v.name}`) : [] };
+  });
+  return { around, named, timetableSchedules: tt.schedules, timingPointsOnLine: cor.pos.size, lineStations: keys, trains, withSched, reportedOnSchedule: reported, onLine, unmatchedSample: sample };
 }
 
 // A health check for a line: for each stretch, how many trains are booked straight between its two
