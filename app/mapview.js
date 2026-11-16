@@ -708,7 +708,7 @@ export async function stationSheet(crs, type = 'dep', back = null) {
   const areas = loadList(AREAS_KEY);
   const saved = loadList(STATIONS_KEY);
   const html = () => `${back ? '<button class="back-link" data-act="back">‹ Back to the train</button>' : ''}
-    <div class="st-head"><div><div class="meta">${lu ? esc((/\((Underground|DLR|Tram)\)$/.exec(st.name) || [, 'Underground'])[1]) : st.country === 'fr' ? 'France · SNCF' : st.country === 'ie' ? 'Ireland · Iarnród Éireann' : esc(crs)}</div><h2 id="sheet-title">${esc(lu ? luShort(st.name) : st.name)}</h2></div></div>
+    <div class="st-head"><div><div class="meta">${lu ? esc((/\((Underground|DLR|Tram)\)$/.exec(st.name) || [, 'Underground'])[1]) : st.country === 'fr' ? 'France · SNCF' : st.country === 'ez' ? 'Eurostar' : st.country === 'ie' ? 'Ireland · Iarnród Éireann' : esc(crs)}</div><h2 id="sheet-title">${esc(lu ? luShort(st.name) : st.name)}</h2></div></div>
     ${lu ? luView().tabs : `<div class="segctl" role="tablist"${!st.country ? ' style="grid-template-columns: repeat(3, minmax(0, 1fr))"' : ''}>
       <button role="tab" data-act="type" data-arg="dep" aria-selected="${current === 'dep'}">Departures</button>
       <button role="tab" data-act="type" data-arg="arr" aria-selected="${current === 'arr'}">Arrivals</button>

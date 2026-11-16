@@ -4,17 +4,21 @@
   "private": true,
   "type": "module",
   "description": "Listens to Network Rail signalling (TD) and movement (TRUST) feeds and streams train positions and delays to the app.",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node index.js",
     "demo": "node index.js",
-    "test": "node test.js && node test-national.js && node test-timetable.js && node test-ie.js && node test-tfl.js && node test-fr.js && node test-linepos.js && node test-findtrain.js && node test-location.js",
+    "test": "node test.js && node test-national.js && node test-timetable.js && node test-ie.js && node test-tfl.js && node test-fr.js && node test-linepos.js && node test-findtrain.js && node test-location.js && node test-eurostar.js",
     "corpus": "node corpus.js",
     "sniff": "node sniff.js",
     "smart": "node smart.js",
     "signals": "node signals.js"
   },
   "dependencies": {
+    "fflate": "^0.8.2",
+    "gtfs-realtime-bindings": "^1.1.1",
     "stompit": "^1.0.0"
   }
 }

@@ -35,6 +35,7 @@ import { trainDetail } from './timetable.js';
 import { LINES, PRESETS } from '../app/lines.js';
 import { band as bandOf } from '../app/model.js';
 import { createFrance, loadFrStations, frBoard, frTrain } from './fr.js';
+import { createEurostar, loadEurostar, pollEurostarRt, ezBoard, ezTrain } from './eurostar.js';
 import { createIrish, loadStations as loadIrishStations, pollTrains as pollIrish, irishTrainsIn, irishBoard, irishTrain } from './ie.js';
 import { BY_CRS } from '../app/geo.js';
 import { createNationalSim } from '../app/national-sim.js';
@@ -53,6 +54,7 @@ let livePanels = null; // panel layouts built from SMART (live only)
 let ieState = null;
 let tflState = null;
 let frState = null;
+let ezState = null;
 let natState = null; // Great Britain trains, for /api/route-trains
 let panelDebug = null;
 let smartNames = null; // SMART station names / areas / STANOX, for /api/smart-find
@@ -244,6 +246,25 @@ if (live) {
     train: (id) => (String(id).startsWith('fr:') ? frTrain(fr, id) : withTfl.train(id)),
     service: (crs, type, id) => (String(id).startsWith('fr:') ? frTrain(fr, id) : withTfl.service(crs, type, id))
   };
+
+  // ---- Eurostar: its own open timetable and live feed (no train positions published) ----
+  const ez = createEurostar();
+  ezState = ez;
+  const ezLoad = () => loadEurostar(ez).then((n) => { ez.error = null; console.log(`[eurostar] ${n} stations`); })
+    .catch((e) => { ez.error = e.message; console.log('[eurostar]', e.message); setTimeout(ezLoad, 30 * 60000); });
+  ezLoad();
+  setInterval(ezLoad, 12 * 3600000); // republished nightly at 22:00 Paris time
+  const ezPoll = () => pollEurostarRt(ez).catch((e) => { ez.rtError = e.message; });
+  ezPoll();
+  setInterval(ezPoll, 60000);
+  const isEz = (code) => /^EZ[A-Z0-9]+$/.test(String(code));
+  const withFr = national;
+  national = {
+    ...withFr,
+    board: (crs, type) => (isEz(crs) ? ezBoard(ez, crs, type) : withFr.board(crs, type)),
+    train: (id) => (String(id).startsWith('ez:') ? ezTrain(ez, id) : withFr.train(id)),
+    service: (crs, type, id) => (String(id).startsWith('ez:') ? ezTrain(ez, id) : withFr.service(crs, type, id))
+  };
 } else {
   const sim = createSim();
   raw = sim.raw;
@@ -326,7 +347,7 @@ const server = http.createServer((req, res) => {
   }
   if (url.pathname === '/api/stations-extra') {
     // stations outside Great Britain the app can show (Ireland so far)
-    return json(200, { stations: [...(ieState ? ieState.stations.values() : []), ...(tflState ? [...tflState.stations.values()].map(({ lines, ...s }) => ({ ...s, lines, nLines: lines.length })) : []), ...(frState ? frState.stations.values() : [])] });
+    return json(200, { stations: [...(ieState ? ieState.stations.values() : []), ...(tflState ? [...tflState.stations.values()].map(({ lines, ...s }) => ({ ...s, lines, nLines: lines.length })) : []), ...(frState ? frState.stations.values() : []), ...(ezState ? [...ezState.stations.values()].map(({ id, tz, ...s }) => ({ ...s, name: s.name + ' (Eurostar)' })) : [])] });
   }
   if (url.pathname === '/api/ni-raw') {
     // Fetch Translink's open data (or its Worldline backup) as the server sees it, to
@@ -444,6 +465,7 @@ const server = http.createServer((req, res) => {
     }
     return json(200, { mode: 'live', at: new Date().toISOString(), routes });
   }
+  if (url.pathname === '/api/ez-debug') return json(200, ezState ? { stations: ezState.stations.size, sample: [...ezState.stations.values()].slice(0, 4).map((s) => `${s.crs} ${s.name}`), trips: ezState.trips.size, timetableLoaded: ezState.loadedAt ? new Date(ezState.loadedAt).toISOString() : null, liveTrips: ezState.rt.size, alerts: ezState.alerts.length, liveAt: ezState.rtAt ? new Date(ezState.rtAt).toISOString() : null, error: ezState.error, liveError: ezState.rtError } : { note: 'Not running (demo mode)' });
   if (url.pathname === '/api/fr-debug') return json(200, frState ? { key: Boolean(process.env.SNCF_KEY), stations: frState.stations.size, sample: [...frState.stations.values()].slice(0, 3), trainsLooked: frState.trains.size, boardsCached: frState.boards.size, callsSinceStart: frState.calls, lastBoard: frState.at ? new Date(frState.at).toISOString() : null, error: frState.error } : { note: 'Not running (demo mode)' });
   if (url.pathname === '/api/ie-debug') return json(200, ieState ? { trains: ieState.trains.size, stations: ieState.stations.size, at: ieState.at ? new Date(ieState.at).toISOString() : null, error: ieState.error, sample: [...ieState.trains.values()].slice(0, 3) } : { note: 'Not running (demo mode)' });
   const tm = /^\/api\/train\/([A-Za-z0-9:% -]{4,48})$/.exec(decodeURIComponent(url.pathname));
