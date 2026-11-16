@@ -8,6 +8,7 @@ import { STATIONS } from './stations.js';
 import { BY_CRS, nearest, searchStations } from './geo.js';
 import { routeFromStops } from './route.js';
 import { statusSheet } from './tflstatus.js';
+import { findTrainSheet } from './findsheet.js';
 import { opBadge, esc, hhmm, lateText, shortLate, bandOf, openSheet, updateSheet, sheetOpen, closeCustomSheet, loadList, saveList, toast, boardHTML, luBoardHTML, textOn } from './ui.js';
 
 const AREAS_KEY = 'mtt.areas';
@@ -718,7 +719,7 @@ export async function stationSheet(crs, type = 'dep', back = null) {
       <button data-act="watch">${areas.some((a) => a.crs === crs) ? 'Watching area' : 'Watch this area'}</button>
       <button data-act="save">${saved.some((s) => s.crs === crs) ? 'Saved' : 'Save station'}</button>
     </div>
-    <div class="sheet-actions one"><button data-act="build">Build a route from here</button></div>`;
+    <div class="sheet-actions">${!st.country ? '<button data-act="find">Find a train from here</button>' : ''}<button data-act="build">Build a route from here</button></div>`;
   const luView = () => { const v = luBoardHTML(data, bound); if (v.bound) bound = v.bound; return v; };
   async function load() {
     data = await (current === 'plat' ? api.platforms(crs) : api.board(crs, current)).catch((e) => ({ error: e.message }));
@@ -727,6 +728,7 @@ export async function stationSheet(crs, type = 'dep', back = null) {
   openSheet(html(), {
     type: (t) => { current = t; data = null; updateSheet(html()); load(); },
     back: () => { if (back) back(); },
+    find: () => findTrainSheet({ crs: [crs], label: st.name }),
     bound: (b) => { bound = b; updateSheet(html()); },
     watch: () => { watchArea(st); updateSheet(html()); },
     // a train on the board: its own screen, with a way back to this board
@@ -811,21 +813,37 @@ async function openArea(a) {
 }
 
 // ---------- search ----------
+// The Find button works even if the map itself hasn't loaded
+document.getElementById('find-btn').addEventListener('click', (e) => {
+  e.preventDefault();
+  const list = document.getElementById('map-results');
+  if (list) list.hidden = true;
+  document.getElementById('map-q').blur();
+  findTrainSheet();
+});
 function wireSearch() {
   const input = document.getElementById('map-q');
   const list = document.getElementById('map-results');
   const show = () => {
     const hits = searchStations(input.value);
-    list.innerHTML = hits.map((h) => `<li><button data-crs="${h.crs}"><b>${esc(h.name)}</b><small>${h.crs}</small></button></li>`).join('');
-    list.hidden = !hits.length;
+    // first option: find a specific train (from a station, optionally to another, around a time)
+    list.innerHTML = `<li><button data-find="1" class="find-opt"><b>Find a train…</b><small>by where &amp; when</small></button></li>` +
+      hits.map((h) => `<li><button data-crs="${h.crs}"><b>${esc(h.name)}</b><small>${h.crs}</small></button></li>`).join('');
+    list.hidden = false;
   };
   input.addEventListener('input', show);
   input.addEventListener('focus', show);
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { const first = list.querySelector('button'); if (first) first.click(); }
+    if (e.key === 'Enter') { const first = list.querySelector('button[data-crs]'); if (first) first.click(); }
     if (e.key === 'Escape') { list.hidden = true; input.blur(); }
   });
   list.addEventListener('click', (e) => {
+    if (e.target.closest('button[data-find]')) {
+      list.hidden = true; input.blur();
+      // if a station is already typed and matches exactly, start the search from it
+      const hit = searchStations(input.value)[0];
+      return findTrainSheet(hit && input.value.trim().length >= 3 && hit.name.toLowerCase().startsWith(input.value.trim().toLowerCase()) ? { crs: [hit.crs], label: hit.name } : null);
+    }
     const b = e.target.closest('button[data-crs]');
     if (!b) return;
     const st = BY_CRS.get(b.dataset.crs);

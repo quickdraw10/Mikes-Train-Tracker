@@ -47,4 +47,10 @@ test('a finished train keeps what happened: found with its arrival, opened with 
   assert.equal(d.delay, 4); assert.match(d.liveNote, /finished/);
 });
 
+test('with a destination: trains around the time that go on to stop there', () => {
+  const r = findTrains(nat, ['GLC'], '17:10', Date.now(), 0, ['EUS']);
+  assert.equal(r.trains.length, 1); assert.equal(r.trains[0].headcode, '1M15'); assert.equal(r.trains[0].toArr, '22:10');
+  assert.equal(findTrains(nat, ['GLC'], '17:10', Date.now(), 0, ['CRS']).trains.length, 0, 'passing Carstairs is not stopping there');
+});
+
 console.log(`\n${passed} find-a-train tests passed`);

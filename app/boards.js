@@ -164,7 +164,7 @@ function render() {
     $root.classList.remove('lu');
     const saved = loadList(STATIONS_KEY);
     $root.innerHTML = `
-      <header class="head"><h1>Station boards</h1><div class="sub">Departures and arrivals for any station, or find a train by when it left</div></header>
+      <header class="head"><h1>Station boards</h1><div class="sub">Departures and arrivals for any station. To find a particular train, use Find in the map's search bar.</div></header>
       <div class="search-block">
         <label class="search" for="b-q">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
@@ -172,7 +172,6 @@ function render() {
         </label>
         <ul id="b-results" class="results" hidden></ul>
       </div>
-      ${findHTML()}
       <section class="list"><div class="list-h">Junctions &amp; other locations</div>
         <div class="find-form"><div class="search-block"><label class="search" for="l-q"><input id="l-q" type="search" placeholder="Junction, yard or loop, e.g. Colton Jn" autocomplete="off"></label><ul id="l-results" class="results" hidden></ul></div></div>
       </section>

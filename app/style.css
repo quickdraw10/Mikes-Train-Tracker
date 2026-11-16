@@ -664,3 +664,9 @@ button.dl-row.link { cursor: pointer; }
 .tr-legend .tr-k { display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin-right: 5px; }
 .tr-k.first { background: #8A6D1E; } .tr-k.std { background: #2A3550; box-shadow: inset 0 0 0 1px var(--text2); }
 .tr-k.quiet { background: #7FD18B; } .tr-k.some { background: var(--mid); } .tr-k.busy { background: var(--bad); }
+/* Find button inside the map search bar */
+.map-search .search { position: relative; }
+.find-btn { flex: none; display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 6px 10px; border: 0; border-radius: 10px; background: var(--navy); color: var(--trim); font: 700 12px var(--body); box-shadow: inset 0 0 0 1px var(--trim); cursor: pointer; }
+.results .find-opt b { color: var(--trim); }
+.find-st b.ph { color: var(--text2); font-weight: 500; }
+.find-st i[data-act] { cursor: pointer; }

@@ -26,12 +26,16 @@ export function minsOf(s) {
 
 // stations: list of station codes (e.g. both Glasgow stations); time: "17:34"
 // day: -1 yesterday, 0 today, 1 tomorrow (the timetable holds those three days)
-export function findTrains(nat, stations, time, now = Date.now(), day = 0) {
+// to: optional destination station codes; then only trains that go on to call there, and the time
+// only needs to be roughly right (an hour either side)
+export function findTrains(nat, stations, time, now = Date.now(), day = 0, to = []) {
   const tt = nat.tt;
   const want = minsOf(time);
   if (!tt || !tt.loadedAt) return { error: 'The timetable is still loading. Try again in a minute.' };
   if (want == null) return { error: 'Give a time like 17:34.' };
   const crsSet = new Set(stations);
+  const toSet = new Set(to || []);
+  const window = toSet.size ? 60 : 15;
   const date = ukDate(now + day * 86400000), nowM = day < 0 ? 1440 * 2 : day > 0 ? -1 : ukMins(now);
   const sched = tt.byDate.get(date) || new Map();
   // live trains by schedule, so each result can open the running train
@@ -47,7 +51,16 @@ export function findTrains(nat, stations, time, now = Date.now(), day = 0) {
       const dep = last ? null : (l.pdep ?? l.dep);
       if (dep == null) return;
       const gap = Math.abs(dep - want);
-      if (gap > 15) return;
+      if (gap > window) return;
+      // going on to the destination? (a later call there, where it stops)
+      let toLoc = null;
+      if (toSet.size) {
+        for (let j = i + 1; j < s.locs.length && !toLoc; j++) {
+          const lj = s.locs[j];
+          if (toSet.has(crsOf(tt, lj.t)) && (lj.parr != null || lj.arr != null) && lj.pass == null) toLoc = lj;
+        }
+        if (!toLoc) return;
+      }
       const t = live.get(s.uid + '|' + date) || null;
       const h = !t && nat.history ? nat.history.get(s.uid + '|' + date) : null; // finished: what actually happened
       const o = s.locs[0], d = s.locs[s.locs.length - 1];
@@ -58,6 +71,7 @@ export function findTrains(nat, stations, time, now = Date.now(), day = 0) {
         station: nameOfTiploc(tt, l.t), dep: hhmmOf(dep),
         origin: nameOfTiploc(tt, o.t), originDep: hhmmOf(o.pdep ?? o.dep),
         dest: nameOfTiploc(tt, d.t), destArr: hhmmOf(d.parr ?? d.arr),
+        toName: toLoc ? nameOfTiploc(tt, toLoc.t) : null, toArr: toLoc ? hhmmOf(toLoc.parr ?? toLoc.arr) : null,
         // what it's doing now, from TRUST (only when it's running)
         status: h ? (h.cancelled ? 'Cancelled' : h.terminated ? `Arrived${h.at ? ' ' + h.at.name : ''}` : `Last reported${h.at ? ' at ' + h.at.name : ''}`)
           : !t ? (o.pdep ?? o.dep ?? 0) > nowM ? 'Not started yet' : 'No live reports'
@@ -68,8 +82,13 @@ export function findTrains(nat, stations, time, now = Date.now(), day = 0) {
   }
   // exact time first, then nearest; trains starting at the station before ones calling there
   found.sort((a, b) => a.gap - b.gap || (b.startsHere - a.startsHere) || a.dep.localeCompare(b.dep));
-  const exact = found.filter((f) => f.gap === 0);
-  return { date, day, time: hhmmOf(want), exact: exact.length, trains: (exact.length ? exact : found).slice(0, 12).map(({ gap, ...f }) => f) };
+  // one row per train (a train can call at two of the 'from' stations)
+  const seen = new Set();
+  const uniq = found.filter((f) => (seen.has(f.id) ? false : seen.add(f.id)));
+  const exact = uniq.filter((f) => f.gap === 0);
+  // with a destination: every train in the window, in time order; without: exact matches, else the nearest
+  const list = toSet.size ? uniq.sort((a, b) => a.dep.localeCompare(b.dep)) : exact.length ? exact : uniq;
+  return { date, day, time: hhmmOf(want), window, exact: exact.length, to: toSet.size > 0, trains: list.slice(0, toSet.size ? 20 : 12).map(({ gap, ...f }) => f) };
 }
 
 // A train's page from the timetable alone, for a train that isn't running (yet, or any more)

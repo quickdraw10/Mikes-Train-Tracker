@@ -412,7 +412,8 @@ const server = http.createServer((req, res) => {
     const crs = String(url.searchParams.get('crs') || '').toUpperCase().split(',').filter((c) => /^[A-Z]{3}$/.test(c)).slice(0, 6);
     if (!crs.length) return json(400, { error: 'Pick a station.' });
     const day = Math.max(-1, Math.min(1, Number(url.searchParams.get('day')) || 0));
-    return json(200, findTrains(natState, crs, url.searchParams.get('time'), Date.now(), day));
+    const to = String(url.searchParams.get('to') || '').toUpperCase().split(',').filter((c) => /^[A-Z]{3}$/.test(c)).slice(0, 6);
+    return json(200, findTrains(natState, crs, url.searchParams.get('time'), Date.now(), day, to));
   }
   if (url.pathname === '/api/lines-check') {
     // every Network line and Route preset, stretch by stretch (?problems=1 for just the stretches with a problem)

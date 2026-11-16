@@ -81,10 +81,10 @@ export async function routeTrains(lines) {
   return r && r.routes ? r : null;
 }
 // "the 17:34 from Glasgow": today's trains booked from these stations at (or near) that time
-export async function findTrain(crs, time, day = 0) {
+export async function findTrain(crs, time, day = 0, to = []) {
   await ready;
   if (mode !== 'server') return { error: 'Finding a train needs the live feed.' };
-  return get(`/api/find-train?crs=${crs.join(',')}&time=${encodeURIComponent(time)}&day=${day}`);
+  return get(`/api/find-train?crs=${crs.join(',')}&time=${encodeURIComponent(time)}&day=${day}${to.length ? '&to=' + to.join(',') : ''}`);
 }
 // a station's platforms over the next two hours
 export async function platforms(crs) {
