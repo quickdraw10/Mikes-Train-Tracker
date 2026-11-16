@@ -35,6 +35,7 @@ import { trainDetail } from './timetable.js';
 import { LINES, PRESETS } from '../app/lines.js';
 import { band as bandOf } from '../app/model.js';
 import { createFrance, loadFrStations, frBoard, frTrain } from './fr.js';
+import { createFinland, loadFiStations, pollFiTrains, pollFiGps, finnishTrainsIn, fiBoard, fiTrain } from './fi.js';
 import { createEurostar, loadEurostar, pollEurostarRt, ezBoard, ezTrain } from './eurostar.js';
 import { createIrish, loadStations as loadIrishStations, pollTrains as pollIrish, irishTrainsIn, irishBoard, irishTrain } from './ie.js';
 import { BY_CRS } from '../app/geo.js';
@@ -55,6 +56,7 @@ let ieState = null;
 let tflState = null;
 let frState = null;
 let ezState = null;
+let fiState = null;
 let natState = null; // Great Britain trains, for /api/route-trains
 let panelDebug = null;
 let smartNames = null; // SMART station names / areas / STANOX, for /api/smart-find
@@ -265,6 +267,35 @@ if (live) {
     train: (id) => (String(id).startsWith('ez:') ? ezTrain(ez, id) : withFr.train(id)),
     service: (crs, type, id) => (String(id).startsWith('ez:') ? ezTrain(ez, id) : withFr.service(crs, type, id))
   };
+
+  // ---- Finland: Fintraffic (digitraffic.fi). Trains on the map by their own GPS ----
+  const fi = createFinland();
+  fiState = fi;
+  const fiStations = () => loadFiStations(fi).then((n) => console.log(`[fi] ${n} stations`))
+    .catch((e) => { fi.error = e.message; console.log('[fi] stations failed:', e.message); setTimeout(fiStations, 10 * 60000); });
+  fiStations();
+  setInterval(fiStations, 24 * 3600000);
+  const fiTrains = () => pollFiTrains(fi).catch((e) => { fi.error = e.message; });
+  fiTrains();
+  setInterval(fiTrains, 30000);
+  const fiGps = () => pollFiGps(fi).catch((e) => { fi.gpsError = e.message; });
+  fiGps();
+  setInterval(fiGps, 15000);
+  const isFi = (code) => fi.stations.has(code);
+  const withEz = national;
+  national = {
+    ...withEz,
+    trains: (box, max = 600, only) => {
+      const r = withEz.trains(box, max, only);
+      // only ask about Finland when the view reaches it
+      if (only || box.e < 19.4 || box.w > 31.6 || box.n < 59.6 || box.s > 70.1) return r;
+      const extra = finnishTrainsIn(fi, box);
+      return { ...r, total: (r.total || 0) + extra.length, trains: [...(r.trains || []), ...extra].sort((a, b) => (b.delay ?? -99) - (a.delay ?? -99)).slice(0, max) };
+    },
+    board: (crs, type) => (isFi(crs) ? fiBoard(fi, crs, type) : withEz.board(crs, type)),
+    train: (id) => (String(id).startsWith('fi:') ? fiTrain(fi, id) : withEz.train(id)),
+    service: (crs, type, id) => (String(id).startsWith('fi:') ? fiTrain(fi, id) : withEz.service(crs, type, id))
+  };
 } else {
   const sim = createSim();
   raw = sim.raw;
@@ -347,7 +378,7 @@ const server = http.createServer((req, res) => {
   }
   if (url.pathname === '/api/stations-extra') {
     // stations outside Great Britain the app can show (Ireland so far)
-    return json(200, { stations: [...(ieState ? ieState.stations.values() : []), ...(tflState ? [...tflState.stations.values()].map(({ lines, ...s }) => ({ ...s, lines, nLines: lines.length })) : []), ...(frState ? frState.stations.values() : []), ...(ezState ? [...ezState.stations.values()].map(({ id, tz, ...s }) => ({ ...s, name: s.name + ' (Eurostar)' })) : [])] });
+    return json(200, { stations: [...(ieState ? ieState.stations.values() : []), ...(tflState ? [...tflState.stations.values()].map(({ lines, ...s }) => ({ ...s, lines, nLines: lines.length })) : []), ...(frState ? frState.stations.values() : []), ...(ezState ? [...ezState.stations.values()].map(({ id, tz, ...s }) => ({ ...s, name: s.name + ' (Eurostar)' })) : []), ...(fiState ? fiState.stations.values() : [])] });
   }
   if (url.pathname === '/api/ni-raw') {
     // Fetch Translink's open data (or its Worldline backup) as the server sees it, to
@@ -466,6 +497,7 @@ const server = http.createServer((req, res) => {
     return json(200, { mode: 'live', at: new Date().toISOString(), routes });
   }
   if (url.pathname === '/api/ez-debug') return json(200, ezState ? { stations: ezState.stations.size, sample: [...ezState.stations.values()].slice(0, 4).map((s) => `${s.crs} ${s.name}`), trips: ezState.trips.size, timetableLoaded: ezState.loadedAt ? new Date(ezState.loadedAt).toISOString() : null, liveTrips: ezState.rt.size, alerts: ezState.alerts.length, liveAt: ezState.rtAt ? new Date(ezState.rtAt).toISOString() : null, error: ezState.error, liveError: ezState.rtError } : { note: 'Not running (demo mode)' });
+  if (url.pathname === '/api/fi-debug') return json(200, fiState ? { stations: fiState.stations.size, sample: [...fiState.stations.values()].slice(0, 3).map((s) => `${s.crs} ${s.name}`), trains: fiState.trains.size, running: [...fiState.trains.values()].filter((t) => t.sum.running).length, withGps: fiState.gps.size, gpsAt: fiState.gpsAt ? new Date(fiState.gpsAt).toISOString() : null, trainsAt: fiState.at ? new Date(fiState.at).toISOString() : null, version: fiState.version, error: fiState.error, gpsError: fiState.gpsError, sampleOnMap: finnishTrainsIn(fiState, { w: 19, s: 59, e: 32, n: 71 }).slice(0, 3) } : { note: 'Not running (demo mode)' });
   if (url.pathname === '/api/fr-debug') return json(200, frState ? { key: Boolean(process.env.SNCF_KEY), stations: frState.stations.size, sample: [...frState.stations.values()].slice(0, 3), trainsLooked: frState.trains.size, boardsCached: frState.boards.size, callsSinceStart: frState.calls, lastBoard: frState.at ? new Date(frState.at).toISOString() : null, error: frState.error } : { note: 'Not running (demo mode)' });
   if (url.pathname === '/api/ie-debug') return json(200, ieState ? { trains: ieState.trains.size, stations: ieState.stations.size, at: ieState.at ? new Date(ieState.at).toISOString() : null, error: ieState.error, sample: [...ieState.trains.values()].slice(0, 3) } : { note: 'Not running (demo mode)' });
   const tm = /^\/api\/train\/([A-Za-z0-9:% -]{4,48})$/.exec(decodeURIComponent(url.pathname));
@@ -505,7 +537,7 @@ const server = http.createServer((req, res) => {
     const type = url.searchParams.get('type') === 'arr' ? 'arr' : 'dep';
     Promise.resolve(national.board(bm[1].toUpperCase(), type))
       .then((b) => json(b.error ? (b.needsKey ? 503 : 502) : 200, b))
-      .catch((e) => json(502, { error: (/^FR\d/.test(bm[1].toUpperCase()) ? 'Could not reach SNCF: ' : 'Could not reach National Rail: ') + e.message }));
+      .catch((e) => json(502, { error: (/^FR\d/.test(bm[1].toUpperCase()) ? 'Could not reach SNCF: ' : fiState && fiState.stations.has(bm[1].toUpperCase()) ? 'Could not reach Fintraffic: ' : 'Could not reach National Rail: ') + e.message }));
     return;
   }
   if (url.pathname === '/api/health') {
