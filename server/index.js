@@ -290,7 +290,7 @@ function schedulePush() {
 setInterval(() => { for (const res of clients) res.write(': ping\n\n'); }, 20000);
 
 // ---- http ----
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png' };
 
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', process.env.ALLOW_ORIGIN || '*');
@@ -300,7 +300,7 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
   cors(res);
   if (url.pathname === '/api/view') {
-    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify(view()));
   }
   if (url.pathname === '/api/stream') {
@@ -310,7 +310,7 @@ const server = http.createServer((req, res) => {
     req.on('close', () => clients.delete(res));
     return;
   }
-  const json = (code, body) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)); };
+  const json = (code, body) => { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)); };
   const num = (k) => Number(url.searchParams.get(k));
   if (url.pathname === '/api/trains') {
     const box = { w: num('w'), s: num('s'), e: num('e'), n: num('n') };
@@ -509,7 +509,7 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (url.pathname === '/api/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     return res.end(JSON.stringify({ mode: raw.mode, trains: Object.keys(raw.trains).length, berths: Object.keys(raw.berths).length, clients: clients.size, ...stats }));
   }
   // static app files
