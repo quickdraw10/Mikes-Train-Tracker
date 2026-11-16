@@ -5,6 +5,7 @@
 
 import * as api from './api.js';
 import { BY_CRS, searchStations } from './geo.js';
+import { STATIONS } from './stations.js';
 import { esc, openSheet, updateSheet, toast } from './ui.js';
 import { trainSheet } from './mapview.js';
 
@@ -15,7 +16,8 @@ const gbOnly = (h) => !BY_CRS.get(h.crs) || !BY_CRS.get(h.crs).country;
 function pickerHTML() {
   const hits = searchStations(fx.q).filter(gbOnly);
   const word = fx.q.trim();
-  const all = hits.length > 1 && word.length >= 3 ? hits.filter((h) => h.name.toLowerCase().startsWith(word.toLowerCase())) : [];
+  // "Any London station": every station whose name starts with the word, not just the first few shown
+  const all = word.length >= 3 ? STATIONS.filter(([c, n]) => n.toLowerCase().startsWith(word.toLowerCase()) && gbOnly({ crs: c })).map(([c, n]) => ({ crs: c, name: n })) : [];
   const rows = (all.length > 1 ? `<li><button data-act="pick" data-arg="${all.map((h) => h.crs).join(',')}" data-label="Any ${esc(word)} station"><b>Any ${esc(word)} station</b><small>${all.length} stations</small></button></li>` : '') +
     hits.map((h) => `<li><button data-act="pick" data-arg="${h.crs}" data-label="${esc(h.name)}"><b>${esc(h.name)}</b><small>${h.crs}</small></button></li>`).join('');
   return `<div class="search-block"><label class="search" for="fx-q"><span class="find-lbl">${fx.picking === 'from' ? 'From' : 'To'}</span><input id="fx-q" type="search" value="${esc(fx.q)}" placeholder="${fx.picking === 'from' ? 'Station it leaves from' : 'Station it goes to'}" autocomplete="off"></label>
@@ -27,13 +29,13 @@ function resultsHTML() {
   if (!r) return '';
   if (r.error) return `<div class="empty">${esc(r.error)}</div>`;
   const when = r.day < 0 ? 'yesterday' : r.day > 0 ? 'tomorrow' : 'today';
-  if (!r.trains.length) return `<div class="empty">No passenger trains ${fx.to ? `from ${esc(fx.from.label)} to ${esc(fx.to.label)}` : 'from there'} within ${r.window} minutes of ${esc(r.time)} ${when}.</div>`;
-  const head = r.to ? `<div class="note">Trains around ${esc(r.time)} ${when}, ${r.window} minutes either side.</div>` : r.exact ? '' : `<div class="note">No train at exactly ${esc(r.time)}; these are the nearest.</div>`;
+  if (!r.trains.length) return `<div class="empty">No passenger trains ${fx.to ? `from ${esc(fx.from.label)} to ${esc(fx.to.label)}` : 'from there'} between 90 minutes before and 2 hours after ${esc(r.time)} ${when}.</div>`;
+  const head = `<div class="note">${r.trains.length} train${r.trains.length === 1 ? '' : 's'} ${when}, from 90 minutes before ${esc(r.time)} to 2 hours after. The nearest to ${esc(r.time)} is highlighted.</div>`;
   return head + `<section class="list">${r.trains.map((f, i) => {
     const bd = f.cancelled ? 'bad' : f.delay == null ? 'none' : f.delay >= 10 ? 'bad' : f.delay >= 2 ? 'mid' : 'ok';
     const route = f.toName ? `to ${esc(f.toName)}${f.toArr ? ' · arr ' + esc(f.toArr) : ''}` : `to ${esc(f.dest)}`;
     const via = [f.startsHere ? (fx.from.crs.length > 1 ? 'from ' + esc(f.station) : '') : `${esc(f.originDep)} from ${esc(f.origin)}`, f.toName && f.toName !== f.dest ? 'continues to ' + esc(f.dest) : '', esc(f.operator || '')].filter(Boolean).join(' · ');
-    return `<button class="row grow" data-act="train" data-arg="${i}">
+    return `<button class="row grow${f.nearest ? ' nearest' : ''}" data-act="train" data-arg="${i}">
       <span class="gtime"><b>${esc(f.dep)}</b><small>${f.startsHere ? 'starts' : 'calls'}</small></span>
       <span class="what">${route}<small class="sub-line">${via}</small><small class="sub-line"><span class="c-${bd}">${esc(f.status)}${f.delay > 0 && !f.cancelled ? ` · +${f.delay}` : ''}</span></small></span>
       <span class="gright"><span class="mins">›</span><small class="hc-small">${esc(f.headcode || '')}</small></span></button>`;
@@ -66,6 +68,8 @@ async function go() {
   fx.busy = true; updateSheet(html());
   fx.results = await api.findTrain(fx.from.crs, fx.time || nowHHMM(), fx.day, fx.to ? fx.to.crs : []).catch((e) => ({ error: e.message }));
   fx.busy = false; updateSheet(html());
+  // bring the train nearest the time asked for into view
+  setTimeout(() => { const n = document.querySelector('.row.nearest'); if (n) n.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 60);
 }
 
 export function findTrainSheet(prefill = null) {

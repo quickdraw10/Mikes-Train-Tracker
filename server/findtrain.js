@@ -35,7 +35,8 @@ export function findTrains(nat, stations, time, now = Date.now(), day = 0, to = 
   if (want == null) return { error: 'Give a time like 17:34.' };
   const crsSet = new Set(stations);
   const toSet = new Set(to || []);
-  const window = toSet.size ? 60 : 15;
+  // always offer a choice: from 90 minutes before the time to 2 hours after
+  const before = 90, after = 120;
   const date = ukDate(now + day * 86400000), nowM = day < 0 ? 1440 * 2 : day > 0 ? -1 : ukMins(now);
   const sched = tt.byDate.get(date) || new Map();
   // live trains by schedule, so each result can open the running train
@@ -51,7 +52,7 @@ export function findTrains(nat, stations, time, now = Date.now(), day = 0, to = 
       const dep = last ? null : (l.pdep ?? l.dep);
       if (dep == null) return;
       const gap = Math.abs(dep - want);
-      if (gap > window) return;
+      if (dep < want - before || dep > want + after) return;
       // going on to the destination? (a later call there, where it stops)
       let toLoc = null;
       if (toSet.size) {
@@ -86,9 +87,10 @@ export function findTrains(nat, stations, time, now = Date.now(), day = 0, to = 
   const seen = new Set();
   const uniq = found.filter((f) => (seen.has(f.id) ? false : seen.add(f.id)));
   const exact = uniq.filter((f) => f.gap === 0);
-  // with a destination: every train in the window, in time order; without: exact matches, else the nearest
-  const list = toSet.size ? uniq.sort((a, b) => a.dep.localeCompare(b.dep)) : exact.length ? exact : uniq;
-  return { date, day, time: hhmmOf(want), window, exact: exact.length, to: toSet.size > 0, trains: list.slice(0, toSet.size ? 20 : 12).map(({ gap, ...f }) => f) };
+  // every train in the window, in time order; the one nearest the time asked for is marked
+  const nearest = uniq.length ? Math.min(...uniq.map((f) => f.gap)) : null;
+  const list = uniq.sort((a, b) => a.dep.localeCompare(b.dep)).slice(0, 60).map(({ gap, ...f }) => ({ ...f, nearest: gap === nearest }));
+  return { date, day, time: hhmmOf(want), before, after, exact: exact.length, to: toSet.size > 0, trains: list };
 }
 
 // A train's page from the timetable alone, for a train that isn't running (yet, or any more)

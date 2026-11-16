@@ -18,7 +18,7 @@ test('times read as minutes', () => { assert.equal(minsOf('17:34'), 1054); asser
 test('the 17:34 from Glasgow Central is found and linked to the running train, freight left out', () => {
   const r = findTrains(nat, ['GLC'], '17:34');
   assert.equal(r.exact, 1);
-  const [t] = r.trains;
+  const t = r.trains.find((x) => x.nearest);
   assert.equal(t.id, running.id); assert.equal(t.headcode, '1M15'); assert.equal(t.dest, 'London Euston');
   assert.equal(t.delay, 12); assert.equal(t.status, 'Left Carlisle'); assert.equal(t.startsHere, true);
 });
@@ -28,9 +28,12 @@ test('a calling point works too: the 18:52 from Carlisle is the same train', () 
   assert.equal(r.trains[0].id, running.id); assert.equal(r.trains[0].startsHere, false); assert.equal(r.trains[0].origin, 'Glasgow Central');
 });
 
-test('no exact match: the nearest within 15 minutes are offered', () => {
+test('a choice: every train from 90 minutes before to 2 hours after, nearest marked', () => {
   const r = findTrains(nat, ['GLC'], '17:38');
-  assert.equal(r.exact, 0); assert.equal(r.trains[0].headcode, '1Y99');
+  assert.equal(r.trains.length, 2); assert.equal(r.trains[0].headcode, '1M15');
+  assert.equal(r.trains.find((t) => t.nearest).headcode, '1Y99');
+  assert.equal(findTrains(nat, ['GLC'], '15:00').trains.length, 0, '17:34 is more than 2 hours after 15:00');
+  assert.equal(findTrains(nat, ['GLC'], '19:00').trains.length, 2, '17:34 is within 90 minutes before 19:00');
 });
 
 test('a train with no live reports opens from the timetable', () => {
@@ -42,7 +45,8 @@ test('a train with no live reports opens from the timetable', () => {
 test('a finished train keeps what happened: found with its arrival, opened with its reports', () => {
   const nat2 = { tt, trains: new Map(), history: new Map([[`G2|${today}`, { id: 'old', code: '1Y99', uid: 'G2', runDate: today, delay: 4, terminated: true, at: { name: 'Carlisle' }, reports: { 1: { dep: 1 } }, updated: Date.now() }]]) };
   const r = findTrains(nat2, ['GLC'], '17:40');
-  assert.equal(r.trains[0].status, 'Arrived Carlisle'); assert.equal(r.trains[0].delay, 4);
+  const g2 = r.trains.find((t) => t.headcode === '1Y99');
+  assert.equal(g2.status, 'Arrived Carlisle'); assert.equal(g2.delay, 4);
   const d = scheduleOnly(nat2, `sch:G2:${today}`, (tt2, t) => ({ code: t.code, delay: t.delay }));
   assert.equal(d.delay, 4); assert.match(d.liveNote, /finished/);
 });

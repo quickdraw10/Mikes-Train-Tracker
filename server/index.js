@@ -409,10 +409,10 @@ const server = http.createServer((req, res) => {
   if (url.pathname === '/api/find-train') {
     // ?crs=GLC,GLQ&time=17:34 -> today's passenger trains booked to leave there at (or near) that time
     if (!natState) return json(200, { error: 'Finding a train needs the live feed (not in demo mode).' });
-    const crs = String(url.searchParams.get('crs') || '').toUpperCase().split(',').filter((c) => /^[A-Z]{3}$/.test(c)).slice(0, 6);
+    const crs = String(url.searchParams.get('crs') || '').toUpperCase().split(',').filter((c) => /^[A-Z]{3}$/.test(c)).slice(0, 40);
     if (!crs.length) return json(400, { error: 'Pick a station.' });
     const day = Math.max(-1, Math.min(1, Number(url.searchParams.get('day')) || 0));
-    const to = String(url.searchParams.get('to') || '').toUpperCase().split(',').filter((c) => /^[A-Z]{3}$/.test(c)).slice(0, 6);
+    const to = String(url.searchParams.get('to') || '').toUpperCase().split(',').filter((c) => /^[A-Z]{3}$/.test(c)).slice(0, 40);
     return json(200, findTrains(natState, crs, url.searchParams.get('time'), Date.now(), day, to));
   }
   if (url.pathname === '/api/lines-check') {

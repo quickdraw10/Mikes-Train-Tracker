@@ -670,3 +670,4 @@ button.dl-row.link { cursor: pointer; }
 .results .find-opt b { color: var(--trim); }
 .find-st b.ph { color: var(--text2); font-weight: 500; }
 .find-st i[data-act] { cursor: pointer; }
+.row.grow.nearest { box-shadow: inset 4px 0 0 var(--trim); background: color-mix(in srgb, var(--trim) 10%, transparent); }
