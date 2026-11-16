@@ -2,12 +2,16 @@
   "name": "mikes-train-tracker",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node server/index.js",
     "test": "npm --prefix server test"
   },
   "dependencies": {
+    "fflate": "^0.8.3",
+    "gtfs-realtime-bindings": "^1.1.1",
     "stompit": "^1.0.0"
   }
 }
