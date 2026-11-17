@@ -600,7 +600,10 @@ export async function trainSheet(t) {
       }
       else if (s.expected && s.expected !== s.booked && /\d/.test(s.expected)) right = `<span class="c-${bd}">${esc(s.expected)}</span>`;
       else if (s.expected === 'Delayed') right = '<span class="c-mid">Delayed</span>';
-      else right = s.pass ? 'pass' : 'On time';
+      // "On time" only on live evidence: the source says so, or the train has started and is running to time
+      else if (s.pass) right = 'pass';
+      else if (s.expected === 'On time' || (s.expected && s.expected === s.booked) || (typeof d.delay === 'number' && d.delay <= 0 && d.stops.some((x) => x.state === 'passed'))) right = 'On time';
+      else right = '<small class="c-none">No live time</small>';
       const plat = s.platform ? `Plat ${esc(s.platform)}` : s.hiddenPlatform ? `Plat ${esc(s.hiddenPlatform)} <em>(not shown to public)</em>` : '';
       const booked = s.pass ? (s.working || s.booked || '') : (s.booked || '');
       const nameEl = s.crs && BY_CRS.has(s.crs) ? `<button class="sn-link" data-act="stn" data-arg="${esc(s.crs)}">${esc(s.name)}</button>` : esc(s.name);

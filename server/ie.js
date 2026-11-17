@@ -78,11 +78,36 @@ export async function loadStations(ie) {
   return ie.stations.size;
 }
 
+// "16 Nov 2026" -> "2026-11-16"
+const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+export function isoOfIrishDate(s) {
+  const m = /^(\d{1,2})\s+([A-Za-z]{3})\w*\s+(\d{4})$/.exec(String(s || '').trim());
+  return m && MONTHS[m[2].toLowerCase()] ? `${m[3]}-${String(MONTHS[m[2].toLowerCase()]).padStart(2, '0')}-${m[1].padStart(2, '0')}` : null;
+}
+// Irish Rail's feed sometimes freezes (e.g. still showing last night's trains the next morning).
+// A train only counts as running now if it's dated today (or yesterday, until 4am, for late trains).
+export function currentDate(dateStr, now = Date.now()) {
+  const d = isoOfIrishDate(dateStr);
+  if (!d) return false;
+  const today = new Date(now).toLocaleDateString('en-CA', { timeZone: 'Europe/Dublin' });
+  if (d === today) return true;
+  const hour = Number(new Date(now).toLocaleTimeString('en-GB', { timeZone: 'Europe/Dublin', hour: '2-digit', hourCycle: 'h23' }));
+  const yesterday = new Date(now - 86400000).toLocaleDateString('en-CA', { timeZone: 'Europe/Dublin' });
+  return d === yesterday && hour < 4;
+}
+
 export async function pollTrains(ie, now = Date.now()) {
   const xml = await get('getCurrentTrainsXML');
+  applyTrainsXml(ie, xml, now);
+}
+export function applyTrainsXml(ie, xml, now = Date.now()) {
   const seen = new Set();
-  for (const r of parseList(xml, 'objTrainPositions')) {
+  const all = parseList(xml, 'objTrainPositions');
+  const feed = { total: all.length, running: 0, stale: 0, dates: [...new Set(all.map((r) => (r.traindate || '').trim()))].slice(0, 4) };
+  for (const r of all) {
     if ((r.trainstatus || '').toUpperCase() !== 'R') continue; // only trains actually running
+    feed.running++;
+    if (!currentDate(r.traindate, now)) { feed.stale++; continue; } // a frozen feed: not where it is now
     const lat = Number(r.trainlatitude), lon = Number(r.trainlongitude);
     if (!lat || !lon) continue;
     const code = (r.traincode || '').trim();
@@ -94,7 +119,8 @@ export async function pollTrains(ie, now = Date.now()) {
   }
   for (const id of ie.trains.keys()) if (!seen.has(id)) ie.trains.delete(id);
   ie.at = now;
-  ie.error = null;
+  ie.feed = feed;
+  ie.error = feed.stale && !seen.size ? 'Irish Rail\'s train positions feed is out of date (it\'s showing trains from ' + feed.dates.join(', ') + ')' : null;
 }
 
 // In the map's shape
@@ -119,10 +145,14 @@ export async function irishBoard(ie, code, type = 'dep') {
   }).map((r) => {
     const booked = type === 'arr' ? hm(r.scharrival) : hm(r.schdepart);
     const exp = type === 'arr' ? hm(r.exparrival) : hm(r.expdepart);
-    const late = r.late === '' || r.late == null ? null : Number(r.late);
+    // Irish Rail sends "0 late" and timetable copies as expected times even when it has no tracking
+    // for the train ("No Information", no last location). That isn't "on time": show no live data.
+    const noLive = /no information/i.test(r.status || '') && !(r.lastlocation || '').trim();
+    const lateRaw = r.late === '' || r.late == null ? null : Number(r.late);
+    const late = noLive || !Number.isFinite(lateRaw) ? null : lateRaw;
     return {
-      id: `ie:${r.traincode}:${r.traindate}`, headcode: r.traincode, booked, expected: late == null ? exp : late <= 0 ? 'On time' : exp,
-      cancelled: /cancel/i.test(r.status || ''), delay: Number.isFinite(late) ? late : null,
+      id: `ie:${(r.traincode || '').trim()}:${r.traindate}`, headcode: (r.traincode || '').trim(), booked, expected: noLive ? null : late == null ? exp : late <= 0 ? 'On time' : exp,
+      noLive, cancelled: /cancel/i.test(r.status || ''), delay: late,
       place: type === 'arr' ? r.origin : r.destination, platform: null, toc: IE_OPERATOR, tocCode: null,
       next: null, reason: null, length: null, lastSeen: r.lastlocation || null
     };
